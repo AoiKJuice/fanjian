@@ -2,7 +2,6 @@
 
 import {
   BookmarkSimple,
-  Check,
   EyeSlash,
   Star,
 } from "@phosphor-icons/react";
@@ -20,19 +19,17 @@ export function RecommendationCard({
   item: Recommendation;
   compact?: boolean;
   runId?: number;
-  onFeedback?: (action: "favorite" | "hide", malId: number) => void;
+  onFeedback?: (
+    action: "favorite" | "hide",
+    malId: number,
+  ) => Promise<void>;
 }) {
   const [feedback, setFeedback] = useState<"favorite" | "hide" | null>(null);
+  const [pending, setPending] = useState<"favorite" | "hide" | null>(null);
   const matchedTags = item.anime.matched_tags?.slice(0, 3) ?? [];
 
   if (feedback === "hide") {
-    return (
-      <article className="undo-panel" role="status">
-        <Check size={22} weight="bold" aria-hidden />
-        <span>已隐藏《{item.anime.title_zh}》</span>
-        <button onClick={() => setFeedback(null)}>撤销</button>
-      </article>
-    );
+    return null;
   }
 
   if (compact) {
@@ -116,26 +113,42 @@ export function RecommendationCard({
       <div className="card-actions" aria-label={`${item.anime.title_zh}操作`}>
         <button
           className={feedback === "favorite" ? "selected" : ""}
-          onClick={() =>
-            {
-              const next = feedback === "favorite" ? null : "favorite";
-              setFeedback(next);
-              if (next) onFeedback?.(next, item.anime.mal_id);
+          disabled={pending !== null}
+          onClick={() => {
+            const next = feedback === "favorite" ? null : "favorite";
+            setFeedback(next);
+            if (next && onFeedback) {
+              setPending("favorite");
+              void onFeedback(next, item.anime.mal_id)
+                .catch(() => setFeedback(null))
+                .finally(() => setPending(null));
             }
-          }
+          }}
         >
           <BookmarkSimple
             size={18}
             weight={feedback === "favorite" ? "fill" : "regular"}
           />
-          {feedback === "favorite" ? "已收藏" : "想看"}
+          {pending === "favorite"
+            ? "保存中…"
+            : feedback === "favorite"
+              ? "已收藏"
+              : "想看"}
         </button>
-        <button onClick={() => {
-          setFeedback("hide");
-          onFeedback?.("hide", item.anime.mal_id);
-        }}>
+        <button
+          disabled={pending !== null}
+          onClick={() => {
+            setPending("hide");
+            setFeedback("hide");
+            if (onFeedback) {
+              void onFeedback("hide", item.anime.mal_id)
+                .catch(() => setFeedback(null))
+                .finally(() => setPending(null));
+            }
+          }}
+        >
           <EyeSlash size={18} />
-          不感兴趣
+          {pending === "hide" ? "更新中…" : "不感兴趣"}
         </button>
       </div>
     </article>

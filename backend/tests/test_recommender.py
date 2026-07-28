@@ -25,6 +25,44 @@ def test_similarity_uses_only_positive_neighbors():
     assert all(neighbor.overlap >= model.overlap_min for neighbor in neighbors)
 
 
+def test_hidden_feedback_changes_neighbor_matching_and_candidate_scores():
+    model = SurpriseUserKNN()
+    ratings = {1101: 9, 1102: 9, 1103: 6, 1104: 6, 1106: 8, 1108: 9}
+    original = model.recommend(ratings, min_support=3)
+    hidden_id = original[0]["anime"]["mal_id"]
+    original_neighbors = model.neighbors(ratings)
+
+    updated = model.recommend(
+        ratings,
+        negative_items={hidden_id},
+        min_support=3,
+    )
+    updated_neighbors = model.neighbors(
+        ratings,
+        negative_items={hidden_id},
+    )
+
+    assert hidden_id not in {
+        item["anime"]["mal_id"] for item in updated
+    }
+    assert [
+        (item.user_id, item.similarity) for item in original_neighbors
+    ] != [
+        (item.user_id, item.similarity) for item in updated_neighbors
+    ]
+    original_scores = {
+        item["anime"]["mal_id"]: item["rank_score"] for item in original
+    }
+    updated_scores = {
+        item["anime"]["mal_id"]: item["rank_score"] for item in updated
+    }
+    shared = set(original_scores).intersection(updated_scores)
+    assert any(
+        original_scores[mal_id] != updated_scores[mal_id]
+        for mal_id in shared
+    )
+
+
 def test_series_filter_is_optional():
     model = SurpriseUserKNN()
     ratings = {1101: 9, 1102: 9, 1103: 6, 1104: 6, 1106: 8, 1108: 9}

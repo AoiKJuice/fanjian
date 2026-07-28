@@ -138,7 +138,8 @@ async def lifespan(app: FastAPI):
             title_mapping_path=title_mapping_path,
         )
         app.state.model_version = (
-            f"{selection['selected_algorithm']}-series-balanced-rank-v3"
+            f"{selection['selected_algorithm']}"
+            "-series-balanced-rank-v3-implicit-negative-v1"
         )
         app.state.data_version = (
             app.state.recommender.manifest.get("data_version")
@@ -523,6 +524,7 @@ async def create_recommendations(payload: RecommendationRequest) -> dict:
         app.state.recommender.recommend(
             ratings,
             excluded=db().excluded(payload.profile_id),
+            negative_items=db().negative_feedback(payload.profile_id),
             limit=payload.limit,
             min_support=max(
                 payload.min_support,
@@ -702,7 +704,7 @@ def model_card() -> dict:
         "data_version": app.state.data_version,
         "algorithm": (
             app.state.model_version.removesuffix(
-                "-series-balanced-rank-v3"
+                "-series-balanced-rank-v3-implicit-negative-v1"
             )
             .replace("_", " ")
         ),
@@ -728,6 +730,7 @@ def model_card() -> dict:
             "同系列评分信号降权",
             "相似用户绝对评分共识",
             "正向偏好优先、负向偏好辅助",
+            "不感兴趣作品的隐式负偏好",
         ],
         "ranking_mode": getattr(
             app.state.recommender, "ranking_mode", "demo"

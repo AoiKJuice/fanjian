@@ -7,8 +7,8 @@ import {
   SortAscending,
 } from "@phosphor-icons/react";
 import { Dialog } from "radix-ui";
-import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RecommendationCard } from "../../components/recommendation-card";
 import { ThemeSelect } from "../../components/theme-select";
 import { StatePanel } from "../../components/ui";
@@ -19,32 +19,89 @@ import {
 } from "../../lib/api";
 
 export default function RecommendationsPage() {
+  const queryClient = useQueryClient();
   const [view, setView] = useState<"grid" | "list">("grid");
   const [format, setFormat] = useState("全部");
   const [minimum, setMinimum] = useState(0);
   const [sort, setSort] = useState("推荐分数");
+  const [locallyHidden, setLocallyHidden] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
     queryFn: loadProfiles,
   });
   const profile = profilesQuery.data?.[0];
   const profileId = profile?.id;
-  const { data, isError, isPending } = useQuery({
+  const recommendationsQuery = useQuery({
     queryKey: ["recommendations", profileId],
     queryFn: () => loadRecommendations(profileId!),
     enabled: Boolean(profileId && profile.rating_count >= 5),
   });
+  const { data, isError, isPending } = recommendationsQuery;
   const recommendations = useMemo(() => data?.items ?? [], [data?.items]);
   const filtered = useMemo(() => {
     const items = recommendations.filter(
       (item) =>
+        !locallyHidden.has(item.anime.mal_id) &&
         (format === "全部" || item.anime.format === format) &&
         item.support >= minimum,
     );
     if (sort === "年份") return [...items].sort((a, b) => b.anime.year - a.anime.year);
     if (sort === "支持人数") return [...items].sort((a, b) => b.support - a.support);
     return items;
-  }, [format, minimum, recommendations, sort]);
+  }, [format, locallyHidden, minimum, recommendations, sort]);
+
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      void recommendationsQuery.refetch().then((result) => {
+        if (!result.error) {
+          setLocallyHidden(new Set());
+          void queryClient.invalidateQueries({
+            queryKey: ["dashboard-recommendations", profileId],
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["recommendation-history", profileId],
+          });
+        }
+      });
+    }, 1500);
+  }, [profileId, queryClient, recommendationsQuery]);
+
+  useEffect(
+    () => () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    },
+    [],
+  );
+
+  const handleFeedback = useCallback(
+    async (action: "favorite" | "hide", malId: number) => {
+      if (!data) return;
+      if (action === "hide") {
+        setLocallyHidden((current) => new Set(current).add(malId));
+      }
+      try {
+        await sendRecommendationFeedback(data.runId, malId, action);
+      } catch (error) {
+        if (action === "hide") {
+          setLocallyHidden((current) => {
+            const next = new Set(current);
+            next.delete(malId);
+            return next;
+          });
+        }
+        throw error;
+      }
+      void queryClient.invalidateQueries({
+        queryKey: ["profile-collections", profileId],
+      });
+      if (action === "hide") scheduleRefresh();
+    },
+    [data, profileId, queryClient, scheduleRefresh],
+  );
 
   return (
     <div className="page recommendations-page">
@@ -139,11 +196,7 @@ export default function RecommendationsPage() {
               item={item}
               compact={view === "list"}
               runId={data?.runId}
-              onFeedback={(action, malId) => {
-                if (data) {
-                  void sendRecommendationFeedback(data.runId, malId, action);
-                }
-              }}
+              onFeedback={handleFeedback}
             />
           ))}
         </div>

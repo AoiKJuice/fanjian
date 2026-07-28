@@ -71,6 +71,8 @@ def test_build_artifacts_preserves_full_catalog(tmp_path: Path):
     assert model.manifest["catalog"]["rows"] == 3
     assert model._mal_to_item == {101: 0, 102: 1, 103: 2}
     assert model.neighbors({101: 10, 102: 5})
+    assert not model.neighbors({101: 10})
+    assert model.neighbors({101: 10}, negative_items={102})
 
     current_catalog = tmp_path / "current.csv"
     pl.DataFrame(

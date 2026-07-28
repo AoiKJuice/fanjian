@@ -707,6 +707,17 @@ class Database:
             ).fetchall()
             return {row["mal_id"] for row in rows}
 
+    def negative_feedback(self, profile_id: int) -> set[int]:
+        with self.connection() as db:
+            rows = db.execute(
+                """
+                SELECT mal_id FROM hidden
+                WHERE profile_id = ?
+                """,
+                (profile_id,),
+            ).fetchall()
+            return {row["mal_id"] for row in rows}
+
     def save_run(
         self,
         profile_id: int,

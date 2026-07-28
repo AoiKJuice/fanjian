@@ -287,8 +287,6 @@ kbd { padding: 2px 6px; background: var(--surface-muted); border: 1px solid var(
 .card-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0; background: var(--surface); }
 .card-actions button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; background: var(--surface); color: var(--text-soft); font-weight: 650; font-size: .78rem; }
 .card-actions button:hover, .card-actions button.selected { background: var(--surface-muted); color: var(--accent); }
-.undo-panel { display: flex; min-height: 150px; align-items: center; justify-content: center; gap: 10px; padding: 24px; background: var(--positive-soft); border: 1px solid var(--positive); border-radius: var(--radius); color: var(--positive); }
-.undo-panel button { background: transparent; text-decoration: underline; font-weight: 700; }
 
 .dialog-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(20, 18, 16, .42); animation: fade-in 160ms ease; }
 .filter-drawer { position: fixed; z-index: 61; inset: 0 0 0 auto; width: min(430px, 100%); padding: 28px; background: var(--surface); box-shadow: -16px 0 40px rgba(0, 0, 0, .16); animation: drawer-in 200ms ease; overflow-y: auto; }

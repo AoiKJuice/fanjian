@@ -10,7 +10,7 @@ import numpy as np
 from .demo_data import ANIME, DemoRating, build_training_ratings
 
 
-MODEL_VERSION = "surprise-userknn-demo-0.1"
+MODEL_VERSION = "surprise-userknn-demo-implicit-negative-v1"
 DATA_VERSION = "fictional-demo-2026-07"
 
 
@@ -129,8 +129,15 @@ class SurpriseUserKNN:
         scale = max(float(np.std(list(raw.values()))), 0.5)
         return {mal_id: value / scale for mal_id, value in raw.items()}
 
-    def neighbors(self, ratings: dict[int, float]) -> list[Neighbor]:
+    def neighbors(
+        self,
+        ratings: dict[int, float],
+        negative_items: set[int] | None = None,
+    ) -> list[Neighbor]:
         target = self._target_residuals(ratings)
+        for mal_id in negative_items or set():
+            if mal_id not in ratings and mal_id in self.anime:
+                target[mal_id] = -1.25
         result: list[Neighbor] = []
         for uid, other in self.residuals.items():
             common = set(target).intersection(other)
@@ -172,14 +179,19 @@ class SurpriseUserKNN:
         self,
         ratings: dict[int, float],
         excluded: set[int] | None = None,
+        negative_items: set[int] | None = None,
         limit: int = 20,
         min_support: int = 5,
         allow_sequels: bool = True,
         formats: list[str] | None = None,
     ) -> list[dict]:
-        excluded = set(excluded or set()).union(ratings)
+        excluded = (
+            set(excluded or set())
+            .union(ratings)
+            .union(negative_items or set())
+        )
         target_residuals = self._target_residuals(ratings)
-        neighbors = self.neighbors(ratings)
+        neighbors = self.neighbors(ratings, negative_items=negative_items)
         candidate_votes: dict[int, list[tuple[float, float]]] = defaultdict(list)
         for neighbor in neighbors:
             for mal_id, residual in self.residuals[neighbor.user_id].items():

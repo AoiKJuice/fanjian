@@ -54,6 +54,20 @@ def test_core_api_flow(tmp_path: Path, monkeypatch):
         assert [item["mal_id"] for item in collections["hidden"]] == [
             recommended_id
         ]
+        assert app.state.db.negative_feedback(profile_id) == {
+            recommended_id
+        }
+        refreshed = client.post(
+            "/api/v1/recommendations",
+            json={"profile_id": profile_id, "min_support": 3},
+        )
+        assert refreshed.status_code == 200
+        refreshed_payload = refreshed.json()
+        assert refreshed_payload["id"] != payload["id"]
+        assert recommended_id not in {
+            item["anime"]["mal_id"]
+            for item in refreshed_payload["items"]
+        }
         removed = client.delete(
             f"/api/v1/profiles/{profile_id}/collections/hidden/{recommended_id}"
         )
@@ -67,7 +81,7 @@ def test_core_api_flow(tmp_path: Path, monkeypatch):
             params={"profile_id": profile_id},
         )
         assert history.status_code == 200
-        assert history.json()["items"][0]["id"] == payload["id"]
+        assert history.json()["items"][0]["id"] == refreshed_payload["id"]
 
         insights = client.get(f"/api/v1/profiles/{profile_id}/insights")
         assert insights.status_code == 200

@@ -590,11 +590,10 @@ class DiskBackedUserKNN:
     def neighbors(
         self,
         ratings: dict[int, float],
+        negative_items: set[int] | None = None,
         excluded_user_indices: set[int] | None = None,
     ) -> list[IndexedNeighbor]:
         target_items, target_residuals = self._target(ratings)
-        if len(target_items) < self.overlap_min:
-            return []
         target_values = np.fromiter(
             (
                 float(ratings[int(self.mal_ids[item_idx])])
@@ -609,6 +608,34 @@ class DiskBackedUserKNN:
                     "mean-centered UserKNN 需要 user_rating_mean.npy。"
                 )
             target_residuals = target_values - float(target_values.mean())
+        explicit_items = set(map(int, target_items))
+        implicit_negative_items = np.fromiter(
+            (
+                self._mal_to_item[mal_id]
+                for mal_id in sorted(negative_items or set())
+                if (
+                    mal_id in self._mal_to_item
+                    and self._mal_to_item[mal_id] not in explicit_items
+                )
+            ),
+            dtype=np.int32,
+        )
+        if len(implicit_negative_items):
+            target_items = np.concatenate(
+                (target_items, implicit_negative_items)
+            )
+            target_residuals = np.concatenate(
+                (
+                    target_residuals,
+                    np.full(
+                        len(implicit_negative_items),
+                        -1.25,
+                        dtype=np.float32,
+                    ),
+                )
+            )
+        if len(target_items) < self.overlap_min:
+            return []
         series_balance = self._series_balance(target_items)
 
         user_count = len(self.user_ids)
@@ -791,6 +818,7 @@ class DiskBackedUserKNN:
         self,
         ratings: dict[int, float],
         excluded: set[int] | None = None,
+        negative_items: set[int] | None = None,
         limit: int = 20,
         min_support: int = 5,
         minimum_item_ratings: int = 20,
@@ -800,7 +828,9 @@ class DiskBackedUserKNN:
     ) -> list[dict]:
         target_items, target_residuals = self._target(ratings)
         neighbors = self.neighbors(
-            ratings, excluded_user_indices=excluded_user_indices
+            ratings,
+            negative_items=negative_items,
+            excluded_user_indices=excluded_user_indices,
         )
         if not neighbors:
             return []
@@ -861,7 +891,11 @@ class DiskBackedUserKNN:
                         neighbor_position, target_position
                     ] = values[row_position]
 
-        excluded_mal_ids = set(excluded or set()).union(ratings)
+        excluded_mal_ids = (
+            set(excluded or set())
+            .union(ratings)
+            .union(negative_items or set())
+        )
         excluded_items = [
             self._mal_to_item[mal_id]
             for mal_id in excluded_mal_ids

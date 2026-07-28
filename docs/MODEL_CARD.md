@@ -3,7 +3,7 @@
 ## 生产模型
 
 - 名称：surprise-weighted positive UserKNN with residual ranking
-- 版本：`surprise_weighted_userknn-series-balanced-rank-v3`
+- 版本：`surprise_weighted_userknn-series-balanced-rank-v3-implicit-negative-v1`
 - 训练评分：134,143,996
 - 训练用户：989,203
 - 评分作品：16,300
@@ -39,6 +39,10 @@ surprise-weighted UserKNN 的 NDCG@10 相对提高 4.49%，用户级 bootstrap �
 - 作品训练评分门槛：20
 
 用户相似度使用标准化评分残差、IUF 和评分事件稀有度。候选排序同样使用邻居对候选作品的标准化残差，不再使用原始评分减用户均分。作品偏差只用于残差校准，不加回候选分数。
+
+用户标记“不感兴趣”的作品以 `-1.25` 标准化残差加入下一次邻居匹配，
+使用负向信号权重 `0.25`。该信号不写入评分表，也不改变作品的 1～10 分
+评分；取消隐藏或改为想看后即从负偏好集合移除。
 
 平台均分、标签、简介和评论不参与核心排序。格式、年份、成人内容和续作选项只删除候选。
 

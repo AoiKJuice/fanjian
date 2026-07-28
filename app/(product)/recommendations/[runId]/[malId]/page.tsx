@@ -9,20 +9,23 @@ import {
   CaretDown,
   CaretUp,
 } from "@phosphor-icons/react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { AnimeCover } from "../../../../components/anime-cover";
 import { StatePanel } from "../../../../components/ui";
 import {
   loadCollections,
+  loadRecommendations,
   loadRecommendationRun,
   removeCollectionItem,
   sendRecommendationFeedback,
 } from "../../../../lib/api";
 
 export default function RecommendationDetailPage() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const params = useParams<{ runId: string; malId: string }>();
   const runId = Number(params.runId);
   const malId = Number(params.malId);
@@ -76,6 +79,22 @@ export default function RecommendationDetailPage() {
         );
       }
       await collectionsQuery.refetch();
+      if (collection === "hidden" && !active) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const refreshed = await loadRecommendations(profileId);
+        queryClient.setQueryData(
+          ["recommendations", profileId],
+          refreshed,
+        );
+        void queryClient.invalidateQueries({
+          queryKey: ["dashboard-recommendations", profileId],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["recommendation-history", profileId],
+        });
+        router.push("/recommendations");
+        return;
+      }
       setActionMessage(
         collection === "favorites"
           ? active
@@ -190,7 +209,7 @@ export default function RecommendationDetailPage() {
             >
               <EyeSlash size={18} weight={isHidden ? "fill" : "regular"} />
               {pendingCollection === "hidden"
-                ? "保存中…"
+                ? "更新中…"
                 : isHidden
                   ? "已忽略"
                   : "不感兴趣"}
