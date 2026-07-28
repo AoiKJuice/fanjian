@@ -125,7 +125,10 @@ export type RecommendationRun = {
 };
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, init);
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    credentials: "include",
+  });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as
       | { detail?: string }
@@ -168,6 +171,7 @@ export async function createProfile(
 export async function deleteProfile(profileId: number): Promise<void> {
   const response = await fetch(`${API_BASE}/profiles/${profileId}`, {
     method: "DELETE",
+    credentials: "include",
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
@@ -219,7 +223,7 @@ export async function removeCollectionItem(
 ): Promise<void> {
   const response = await fetch(
     `${API_BASE}/profiles/${profileId}/collections/${collection}/${malId}`,
-    { method: "DELETE" },
+    { method: "DELETE", credentials: "include" },
   );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
@@ -307,6 +311,7 @@ export async function loadRecommendationHistory(
 export async function deleteRecommendationRun(runId: number): Promise<void> {
   const response = await fetch(`${API_BASE}/recommendations/${runId}`, {
     method: "DELETE",
+    credentials: "include",
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
@@ -340,6 +345,7 @@ export async function sendRecommendationFeedback(
     `${API_BASE}/recommendations/${runId}/feedback`,
     {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mal_id: malId, action }),
     },

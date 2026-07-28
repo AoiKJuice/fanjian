@@ -1,8 +1,48 @@
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from backend.main import app
+
+
+def test_browser_workspaces_are_isolated(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("ANIME_DB_PATH", str(tmp_path / "tenant.db"))
+    monkeypatch.setenv("ANIME_USE_DEMO", "1")
+    monkeypatch.setenv("ANIME_MULTI_TENANT", "1")
+    first_workspace = str(uuid4())
+    second_workspace = str(uuid4())
+    first_headers = {
+        "Cookie": f"fanjian_workspace={first_workspace}"
+    }
+    second_headers = {
+        "Cookie": f"fanjian_workspace={second_workspace}"
+    }
+
+    with TestClient(app) as client:
+        assert client.get(
+            "/api/v1/profiles", headers=first_headers
+        ).json() == []
+        created = client.post(
+            "/api/v1/profiles",
+            headers=first_headers,
+            json={"name": "浏览器一", "title_language": "zh"},
+        )
+        assert created.status_code == 201
+        profile_id = created.json()["id"]
+
+        assert len(
+            client.get(
+                "/api/v1/profiles", headers=first_headers
+            ).json()
+        ) == 1
+        assert client.get(
+            "/api/v1/profiles", headers=second_headers
+        ).json() == []
+        assert client.get(
+            f"/api/v1/profiles/{profile_id}/library",
+            headers=second_headers,
+        ).status_code == 404
 
 
 def test_core_api_flow(tmp_path: Path, monkeypatch):

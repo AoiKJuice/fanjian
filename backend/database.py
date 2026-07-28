@@ -26,6 +26,7 @@ class Database:
         title_mapping_path: str | Path | None = None,
     ) -> None:
         configured = path or os.getenv("ANIME_DB_PATH", "runtime/anime.db")
+        self.multi_tenant = os.getenv("ANIME_MULTI_TENANT") == "1"
         self.path = Path(configured)
         self.catalog_path = Path(catalog_path) if catalog_path else None
         self.expected_catalog_items = expected_catalog_items
@@ -64,6 +65,7 @@ class Database:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
                     title_language TEXT NOT NULL DEFAULT 'zh',
+                    workspace_id TEXT NOT NULL DEFAULT 'local',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -133,6 +135,23 @@ class Database:
                 );
                 """
             )
+            profile_columns = {
+                row["name"]
+                for row in db.execute("PRAGMA table_info(profiles)").fetchall()
+            }
+            if "workspace_id" not in profile_columns:
+                db.execute(
+                    """
+                    ALTER TABLE profiles
+                    ADD COLUMN workspace_id TEXT NOT NULL DEFAULT 'local'
+                    """
+                )
+            db.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_profiles_workspace
+                ON profiles(workspace_id)
+                """
+            )
             db.execute(
                 """
                 UPDATE ratings SET rating = NULL
@@ -162,12 +181,14 @@ class Database:
             if switching_from_demo:
                 self._remove_untouched_demo_profile(db)
             count = db.execute("SELECT COUNT(*) FROM profiles").fetchone()[0]
-            if count == 0:
+            if count == 0 and not self.multi_tenant:
                 now = utcnow()
                 cursor = db.execute(
                     """
-                    INSERT INTO profiles(name, title_language, created_at, updated_at)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO profiles(
+                        name, title_language, workspace_id, created_at, updated_at
+                    )
+                    VALUES (?, ?, 'local', ?, ?)
                     """,
                     (
                         "本地资料" if self.catalog_path else "林澈",
@@ -424,36 +445,51 @@ class Database:
                 ],
             )
 
-    def profile_exists(self, profile_id: int) -> bool:
+    def profile_exists(
+        self, profile_id: int, workspace_id: str = "local"
+    ) -> bool:
         with self.connection() as db:
             return (
                 db.execute(
-                    "SELECT 1 FROM profiles WHERE id = ?", (profile_id,)
+                    """
+                    SELECT 1 FROM profiles
+                    WHERE id = ? AND workspace_id = ?
+                    """,
+                    (profile_id, workspace_id),
                 ).fetchone()
                 is not None
             )
 
-    def list_profiles(self) -> list[dict]:
+    def list_profiles(self, workspace_id: str = "local") -> list[dict]:
         with self.connection() as db:
             rows = db.execute(
                 """
                 SELECT p.*, COUNT(r.mal_id) AS rating_count
                 FROM profiles p LEFT JOIN ratings r
                 ON p.id = r.profile_id AND r.rating IS NOT NULL
+                WHERE p.workspace_id = ?
                 GROUP BY p.id ORDER BY p.id
-                """
+                """,
+                (workspace_id,),
             ).fetchall()
             return [dict(row) for row in rows]
 
-    def create_profile(self, name: str, title_language: str) -> dict:
+    def create_profile(
+        self,
+        name: str,
+        title_language: str,
+        workspace_id: str = "local",
+    ) -> dict:
         now = utcnow()
         with self.connection() as db:
             cursor = db.execute(
                 """
-                INSERT INTO profiles(name, title_language, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO profiles(
+                    name, title_language, workspace_id, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (name, title_language, now, now),
+                (name, title_language, workspace_id, now, now),
             )
             return {
                 "id": cursor.lastrowid,
@@ -464,9 +500,17 @@ class Database:
                 "rating_count": 0,
             }
 
-    def delete_profile(self, profile_id: int) -> bool:
+    def delete_profile(
+        self, profile_id: int, workspace_id: str = "local"
+    ) -> bool:
         with self.connection() as db:
-            cursor = db.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
+            cursor = db.execute(
+                """
+                DELETE FROM profiles
+                WHERE id = ? AND workspace_id = ?
+                """,
+                (profile_id, workspace_id),
+            )
             return cursor.rowcount > 0
 
     def upsert_ratings(self, profile_id: int, items: list[dict]) -> None:
@@ -750,10 +794,18 @@ class Database:
             )
             return run_id
 
-    def get_run(self, run_id: int) -> dict | None:
+    def get_run(
+        self, run_id: int, workspace_id: str = "local"
+    ) -> dict | None:
         with self.connection() as db:
             row = db.execute(
-                "SELECT * FROM recommendation_runs WHERE id = ?", (run_id,)
+                """
+                SELECT r.*
+                FROM recommendation_runs r
+                JOIN profiles p ON p.id = r.profile_id
+                WHERE r.id = ? AND p.workspace_id = ?
+                """,
+                (run_id, workspace_id),
             ).fetchone()
             if not row:
                 return None
@@ -768,25 +820,40 @@ class Database:
             result["items"] = [json.loads(item["payload"]) for item in items]
             return result
 
-    def history(self, profile_id: int | None = None) -> list[dict]:
+    def history(
+        self,
+        profile_id: int | None = None,
+        workspace_id: str = "local",
+    ) -> list[dict]:
         query = """
             SELECT r.*, COUNT(i.mal_id) AS item_count
             FROM recommendation_runs r
+            JOIN profiles p ON p.id = r.profile_id
             LEFT JOIN recommendation_items i ON i.run_id = r.id
         """
-        params: tuple = ()
+        clauses = ["p.workspace_id = ?"]
+        params: tuple = (workspace_id,)
         if profile_id is not None:
-            query += " WHERE r.profile_id = ?"
-            params = (profile_id,)
+            clauses.append("r.profile_id = ?")
+            params += (profile_id,)
+        query += " WHERE " + " AND ".join(clauses)
         query += " GROUP BY r.id ORDER BY r.id DESC"
         with self.connection() as db:
             rows = db.execute(query, params).fetchall()
             return [dict(row) for row in rows]
 
-    def delete_run(self, run_id: int) -> bool:
+    def delete_run(
+        self, run_id: int, workspace_id: str = "local"
+    ) -> bool:
         with self.connection() as db:
             cursor = db.execute(
-                "DELETE FROM recommendation_runs WHERE id = ?", (run_id,)
+                """
+                DELETE FROM recommendation_runs
+                WHERE id = ? AND profile_id IN (
+                    SELECT id FROM profiles WHERE workspace_id = ?
+                )
+                """,
+                (run_id, workspace_id),
             )
             return cursor.rowcount > 0
 

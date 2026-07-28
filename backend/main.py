@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
 import statistics
+import time
 import xml.etree.ElementTree as ET
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from pathlib import Path
+from uuid import UUID, uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from .anilist import AniListClient, AniListError
 from .bangumi import (
@@ -165,6 +171,10 @@ async def lifespan(app: FastAPI):
             else None
         ),
     )
+    app.state.recommendation_slots = asyncio.Semaphore(
+        int(os.getenv("ANIME_RECOMMENDATION_CONCURRENCY", "1"))
+    )
+    app.state.recommendation_requests = defaultdict(deque)
     yield
 
 
@@ -194,9 +204,59 @@ app.add_middleware(
     allow_private_network=True,
 )
 
+WORKSPACE_COOKIE = "fanjian_workspace"
+workspace_context: ContextVar[str] = ContextVar(
+    "fanjian_workspace", default="local"
+)
+
+
+@app.middleware("http")
+async def isolate_browser_workspace(request: Request, call_next):
+    if os.getenv("ANIME_MULTI_TENANT") != "1":
+        return await call_next(request)
+
+    workspace_id = request.cookies.get(WORKSPACE_COOKIE)
+    try:
+        workspace_id = str(UUID(workspace_id)) if workspace_id else None
+    except ValueError:
+        workspace_id = None
+    if workspace_id is None:
+        workspace_id = str(uuid4())
+
+    token = workspace_context.set(workspace_id)
+    try:
+        response = await call_next(request)
+    finally:
+        workspace_context.reset(token)
+    response.set_cookie(
+        WORKSPACE_COOKIE,
+        workspace_id,
+        max_age=31_536_000,
+        httponly=True,
+        secure=os.getenv("ANIME_COOKIE_SECURE") == "1",
+        samesite="lax",
+        path="/",
+    )
+    return response
+
 
 def db() -> Database:
     return app.state.db
+
+
+def workspace_id() -> str:
+    return workspace_context.get()
+
+
+def check_recommendation_rate() -> None:
+    limit = int(os.getenv("ANIME_RECOMMENDATIONS_PER_MINUTE", "6"))
+    now = time.monotonic()
+    requests = app.state.recommendation_requests[workspace_id()]
+    while requests and requests[0] <= now - 60:
+        requests.popleft()
+    if len(requests) >= limit:
+        raise HTTPException(status_code=429, detail="推荐请求过于频繁")
+    requests.append(now)
 
 
 async def enrich_bangumi_metadata(anime_items: list[dict]) -> None:
@@ -228,7 +288,7 @@ async def enrich_bangumi_metadata(anime_items: list[dict]) -> None:
 
 
 def require_profile(profile_id: int) -> None:
-    if not db().profile_exists(profile_id):
+    if not db().profile_exists(profile_id, workspace_id()):
         raise HTTPException(status_code=404, detail="本地资料不存在")
 
 
@@ -255,17 +315,21 @@ def health() -> dict:
 
 @app.get("/api/v1/profiles", response_model=list[Profile])
 def list_profiles() -> list[dict]:
-    return db().list_profiles()
+    return db().list_profiles(workspace_id())
 
 
 @app.post("/api/v1/profiles", response_model=Profile, status_code=201)
 def create_profile(payload: ProfileCreate) -> dict:
-    return db().create_profile(payload.name, payload.title_language)
+    return db().create_profile(
+        payload.name,
+        payload.title_language,
+        workspace_id(),
+    )
 
 
 @app.delete("/api/v1/profiles/{profile_id}", status_code=204)
 def delete_profile(profile_id: int) -> None:
-    if not db().delete_profile(profile_id):
+    if not db().delete_profile(profile_id, workspace_id()):
         raise HTTPException(status_code=404, detail="本地资料不存在")
 
 
@@ -513,27 +577,28 @@ async def import_mal(
 @app.post("/api/v1/recommendations", response_model=RecommendationRun)
 async def create_recommendations(payload: RecommendationRequest) -> dict:
     require_profile(payload.profile_id)
+    check_recommendation_rate()
     ratings = db().profile_ratings(payload.profile_id)
     status = (
         "ready"
         if len(ratings) >= app.state.recommender.overlap_min
         else "insufficient"
     )
-    items = (
-        app.state.recommender.recommend(
-            ratings,
-            excluded=db().excluded(payload.profile_id),
-            limit=payload.limit,
-            min_support=max(
-                payload.min_support,
-                getattr(app.state, "production_min_support", 1),
-            ),
-            allow_sequels=payload.allow_sequels,
-            formats=payload.formats,
-        )
-        if status == "ready"
-        else []
-    )
+    items = []
+    if status == "ready":
+        async with app.state.recommendation_slots:
+            items = await run_in_threadpool(
+                app.state.recommender.recommend,
+                ratings,
+                excluded=db().excluded(payload.profile_id),
+                limit=payload.limit,
+                min_support=max(
+                    payload.min_support,
+                    getattr(app.state, "production_min_support", 1),
+                ),
+                allow_sequels=payload.allow_sequels,
+                formats=payload.formats,
+            )
     await enrich_bangumi_metadata(
         [item["anime"] for item in items]
     )
@@ -545,19 +610,19 @@ async def create_recommendations(payload: RecommendationRequest) -> dict:
         status,
         items,
     )
-    return db().get_run(run_id)
+    return db().get_run(run_id, workspace_id())
 
 
 @app.get("/api/v1/recommendations/history")
 def recommendation_history(profile_id: int | None = None) -> dict:
     if profile_id is not None:
         require_profile(profile_id)
-    return {"items": db().history(profile_id)}
+    return {"items": db().history(profile_id, workspace_id())}
 
 
 @app.get("/api/v1/recommendations/{run_id}", response_model=RecommendationRun)
 async def recommendation_run(run_id: int) -> dict:
-    run = db().get_run(run_id)
+    run = db().get_run(run_id, workspace_id())
     if not run:
         raise HTTPException(status_code=404, detail="推荐记录不存在")
     await enrich_bangumi_metadata(
@@ -568,13 +633,13 @@ async def recommendation_run(run_id: int) -> dict:
 
 @app.delete("/api/v1/recommendations/{run_id}", status_code=204)
 def delete_recommendation_run(run_id: int) -> None:
-    if not db().delete_run(run_id):
+    if not db().delete_run(run_id, workspace_id()):
         raise HTTPException(status_code=404, detail="推荐记录不存在")
 
 
 @app.post("/api/v1/recommendations/{run_id}/feedback")
 def recommendation_feedback(run_id: int, payload: FeedbackInput) -> dict:
-    run = db().get_run(run_id)
+    run = db().get_run(run_id, workspace_id())
     if not run:
         raise HTTPException(status_code=404, detail="推荐记录不存在")
     if payload.action == "watched":
