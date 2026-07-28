@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-07-28T08:31:29.843254+00:00",
+  "repository": "AoiKJuice/fanjian",
+  "release_tag": "model-2026-07-28",
+  "model_directory": "anime-model-open-2026-27",
+  "compression": "tar+zstd",
+  "uncompressed_runtime_bytes": 3243438915,
+  "expected_files": [
+    {
+      "path": "affinity_calibration.npz",
+      "bytes": 1328,
+      "sha256": "e049da601cbcf75aa506c861fa9057a1d035c206b01899631c105a4714e7bf48"
+    },
+    {
+      "path": "bangumi-mapping.parquet",
+      "bytes": 284594,
+      "sha256": "18d83db1bf31e60c492360e935de06a7c645105453f4abb464be671c27593096"
+    },
+    {
+      "path": "catalog.parquet",
+      "bytes": 2680070,
+      "sha256": "69c611d9886f7a5d6dd345bcf85e0014be3200e961a31ae1c96a34b7d6a6d17d"
+    },
+    {
+      "path": "csc_indices.npy",
+      "bytes": 536576112,
+      "sha256": "499a9ad05339556dd2f87fb8eac7d9a79950b5602b0e02abe7ddb697f92034b6"
+    },
+    {
+      "path": "csc_indptr.npy",
+      "bytes": 245552,
+      "sha256": "571e2e963395c6143a58872bce2ec6e923e3354ae5235e47efd7a5b7b07ff399"
+    },
+    {
+      "path": "csc_ratings.npy",
+      "bytes": 536576112,
+      "sha256": "040cfdce5ff67339723a438f00ee3ad6debd22d85d58221087991c7bc3b49477"
+    },
+    {
+      "path": "csc_residuals.npy",
+      "bytes": 536576112,
+      "sha256": "967df49e56473c7fb5d65554db356e237892709c70c7749554d148c7294d5799"
+    },
+    {
+      "path": "csr_indices.npy",
+      "bytes": 536576112,
+      "sha256": "709a71023322544cd2712f3b1a39eb148e3dadb52c21a079d1d521a3eba5b38a"
+    },
+    {
+      "path": "csr_indptr.npy",
+      "bytes": 7913760,
+      "sha256": "96951c15849d639f093851199e4f416d43bcb0356a9b3bc8028a13b9e0253f32"
+    },
+    {
+      "path": "csr_ratings.npy",
+      "bytes": 536576112,
+      "sha256": "e5b154a295d3b2180ef9bfae1e2802a4c7e580594ad46b607f529730c1cf952d"
+    },
+    {
+      "path": "csr_residuals.npy",
+      "bytes": 536576112,
+      "sha256": "9afe63dac5a0ae0dbcbbadebbe1391e492acfe4f464d9480a98452195cf9ea2e"
+    },
+    {
+      "path": "global_mean.txt",
+      "bytes": 16,
+      "sha256": "85ce44014a83273d6748a3080ad911b34467fb937f654f1e289cb8e893b86bc4"
+    },
+    {
+      "path": "item_bias.npy",
+      "bytes": 122836,
+      "sha256": "f8148cae12eef5065280c61b7c11d0b4face695c76d134c5a1ac056dd942b9c9"
+    },
+    {
+      "path": "item_counts.npy",
+      "bytes": 245544,
+      "sha256": "928bfe93c00cdb28a5adfcd5555db0af2510200e3d9b5afc7560977a49d83335"
+    },
+    {
+      "path": "item_iuf.npy",
+      "bytes": 122836,
+      "sha256": "50857e39156f05584a521aa7cb237eaa95a0816bc2f17c8637ece2c8e172e1a2"
+    },
+    {
+      "path": "item_surprise.npy",
+      "bytes": 368252,
+      "sha256": "e99fab5340d58b700c084b7fd90769dc6c925dfe44a66f6c57a3c4ee5421f86b"
+    },
+    {
+      "path": "mal_ids.npy",
+      "bytes": 122836,
+      "sha256": "87994d7a827c1fc9e6b634487e8a18c8aa9e8eca2260e43594b211d37368a413"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 3023,
+      "sha256": "6242ffb6cd4f9da1c80dc271574355a1366be5747b2f6288d3d0cb7837f54c1f"
+    },
+    {
+      "path": "model-selection.json",
+      "bytes": 904,
+      "sha256": "807863e1ae4ebca0c4bf6b0e0050470409b36ac6a4df459be628ed116df1bb9e"
+    },
+    {
+      "path": "user_ids.npy",
+      "bytes": 7913752,
+      "sha256": "985cb1bf7dc757f68fb40ce23790e3cc2f160a7a169f87c35ded9bbd8acc21df"
+    },
+    {
+      "path": "user_rating_mean.npy",
+      "bytes": 3956940,
+      "sha256": "107bb10d09865f921fa925701a0d55547f8c9de0cb9abf40adeee404b046e26b"
+    }
+  ],
+  "parts": [
+    {
+      "name": "fanjian-model-2026-07-28.tar.zst.part01",
+      "bytes": 1583894846,
+      "sha256": "1364716fb6a7d8a7706acc31df150dc5db072dcfbf243610857919b0a0aea341",
+      "url": "https://github.com/AoiKJuice/fanjian/releases/download/model-2026-07-28/fanjian-model-2026-07-28.tar.zst.part01"
+    }
+  ]
+}

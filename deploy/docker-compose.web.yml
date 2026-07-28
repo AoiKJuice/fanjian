@@ -1,0 +1,11 @@
+services:
+  fanjian-web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        NEXT_PUBLIC_BASE_PATH: /tools/anime-affinity/app
+    container_name: fanjian-web
+    ports:
+      - "127.0.0.1:3010:3000"
+    restart: unless-stopped

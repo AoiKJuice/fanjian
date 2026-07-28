@@ -1,0 +1,44 @@
+[project]
+name = "anime-affinity-lab"
+version = "0.1.0"
+description = "Local-first anime rating recommendation research product"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "duckdb==1.5.5",
+  "fastapi==0.140.0",
+  "httpx==0.28.1",
+  "numba==0.66.0",
+  "numpy==2.4.6",
+  "polars==1.43.0",
+  "pydantic==2.13.4",
+  "python-multipart==0.0.32",
+  "scipy==1.18.0",
+  "uvicorn==0.51.0",
+  "zstandard==0.25.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest==9.1.1"]
+mf = ["torch==2.13.0"]
+
+[project.scripts]
+anime-build-model = "backend.training.build_artifacts:main"
+anime-augment-model = "backend.training.augment_artifacts:main"
+anime-evaluate-model = "backend.training.evaluation:main"
+anime-select-model = "backend.training.select_model:main"
+anime-train-mf = "backend.training.train_matrix_factorization:main"
+anime-evaluate-mf = "backend.training.evaluate_matrix_factorization:main"
+anime-download-catalog = "backend.training.download_jikan_catalog:main"
+anime-expand-catalog = "backend.training.expand_catalog:main"
+anime-refresh-bootstrap = "backend.training.refresh_bootstrap:main"
+anime-calibrate-affinity = "backend.training.calibrate_affinity:main"
+anime-search-knn = "backend.training.search_knn:main"
+anime-prepare-bangumi-mapping = "backend.training.prepare_bangumi_mapping:main"
+anime-search-surprise-mix = "backend.training.search_surprise_mix:main"
+anime-download-bahamut-ratings = "backend.training.download_bahamut_ratings:main"
+anime-prepare-combined-training = "backend.training.prepare_combined_training:main"
+anime-build-open-catalog = "backend.training.build_open_catalog:main"
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+addopts = "-q --basetemp=.pytest_tmp"

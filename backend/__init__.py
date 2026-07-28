@@ -1,0 +1,1 @@
+"""Anime Affinity Lab backend."""

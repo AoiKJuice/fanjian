@@ -1,0 +1,17 @@
+.git
+.next
+.venv
+.vinext
+.wrangler
+data
+dist
+node_modules
+output
+outputs
+playwright-report
+runtime
+test-results
+*.db
+*.db-shm
+*.db-wal
+*.log

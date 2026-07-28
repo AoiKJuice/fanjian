@@ -1,0 +1,233 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+ANIME = [
+    {
+        "mal_id": 1101,
+        "title_zh": "星港观测日志",
+        "title_native": "星港観測日誌",
+        "title_en": "Harbor of Stars",
+        "format": "TV",
+        "episodes": 12,
+        "year": 2024,
+        "release_status": "FINISHED",
+        "synopsis": "轨道观测员在即将关闭的海上天文台记录最后一个夏季，也发现了被城市遗忘的信号。",
+        "cover_index": 0,
+        "is_adult": False,
+        "platform_mean": 7.6,
+    },
+    {
+        "mal_id": 1102,
+        "title_zh": "鲸落之夏",
+        "title_native": "鯨落の夏",
+        "title_en": "A Summer After Whales",
+        "format": "MOVIE",
+        "episodes": 1,
+        "year": 2021,
+        "release_status": "FINISHED",
+        "synopsis": "海边小镇的两名学生沿着一封旧信，寻找几十年前失踪的鲸歌录音。",
+        "cover_index": 1,
+        "is_adult": False,
+        "platform_mean": 8.1,
+    },
+    {
+        "mal_id": 1103,
+        "title_zh": "雪夜第七码",
+        "title_native": "雪夜の第七符",
+        "title_en": "The Seventh Cipher",
+        "format": "TV",
+        "episodes": 10,
+        "year": 2020,
+        "release_status": "FINISHED",
+        "synopsis": "一位档案员在封城雪夜里追查七份互相矛盾的列车记录。",
+        "cover_index": 2,
+        "is_adult": False,
+        "platform_mean": 7.3,
+    },
+    {
+        "mal_id": 1104,
+        "title_zh": "火种面包房",
+        "title_native": "火種パン工房",
+        "title_en": "Ember Bakery",
+        "format": "TV",
+        "episodes": 24,
+        "year": 2019,
+        "release_status": "FINISHED",
+        "synopsis": "边境村落的面包师用会保存记忆的火种，为过客烤制只属于他们的味道。",
+        "cover_index": 3,
+        "is_adult": False,
+        "platform_mean": 7.8,
+    },
+    {
+        "mal_id": 1105,
+        "title_zh": "轨道尽头",
+        "title_native": "軌道の果て",
+        "title_en": "At Orbit's End",
+        "format": "TV",
+        "episodes": 13,
+        "year": 2025,
+        "release_status": "FINISHED",
+        "synopsis": "退役机师护送一座失控空间站穿过废弃轨道，任务却与自己的旧日档案相连。",
+        "cover_index": 4,
+        "is_adult": False,
+        "platform_mean": 8.4,
+    },
+    {
+        "mal_id": 1106,
+        "title_zh": "雨城和弦",
+        "title_native": "雨街コード",
+        "title_en": "Chords in Rain",
+        "format": "TV",
+        "episodes": 12,
+        "year": 2023,
+        "release_status": "FINISHED",
+        "synopsis": "三位业余乐手在永不停雨的城市收集街头声音，准备一场没有观众的演出。",
+        "cover_index": 5,
+        "is_adult": False,
+        "platform_mean": 7.9,
+    },
+    {
+        "mal_id": 1107,
+        "title_zh": "赤岭行记",
+        "title_native": "赤嶺行記",
+        "title_en": "Red Ridge Journal",
+        "format": "OVA",
+        "episodes": 4,
+        "year": 2017,
+        "release_status": "FINISHED",
+        "synopsis": "沉默的测绘师与离家少年穿过赤色山岭，把地图上不存在的村庄重新标记。",
+        "cover_index": 6,
+        "is_adult": False,
+        "platform_mean": 7.2,
+    },
+    {
+        "mal_id": 1108,
+        "title_zh": "玻璃温室",
+        "title_native": "硝子の温室",
+        "title_en": "Glasshouse",
+        "format": "ONA",
+        "episodes": 8,
+        "year": 2022,
+        "release_status": "FINISHED",
+        "synopsis": "植物学徒照料会模仿情绪的稀有花群，也开始怀疑温室之外的季节是否真实。",
+        "cover_index": 7,
+        "is_adult": False,
+        "platform_mean": 7.5,
+    },
+    {
+        "mal_id": 1109,
+        "title_zh": "第二个月亮",
+        "title_native": "二番目の月",
+        "title_en": "The Second Moon",
+        "format": "MOVIE",
+        "episodes": 1,
+        "year": 2016,
+        "release_status": "FINISHED",
+        "synopsis": "天文摄影师拍到一颗只在底片上出现的月亮，沿着影像寻找失落的岛屿。",
+        "cover_index": 0,
+        "is_adult": False,
+        "platform_mean": 7.0,
+    },
+    {
+        "mal_id": 1110,
+        "title_zh": "白昼邮局",
+        "title_native": "白昼郵便局",
+        "title_en": "Noon Post Office",
+        "format": "TV",
+        "episodes": 12,
+        "year": 2018,
+        "release_status": "FINISHED",
+        "synopsis": "城市里最后一家只在正午营业的邮局，负责递送寄往过去的信。",
+        "cover_index": 3,
+        "is_adult": False,
+        "platform_mean": 7.7,
+    },
+    {
+        "mal_id": 1111,
+        "title_zh": "深海热源",
+        "title_native": "深海熱源",
+        "title_en": "Abyssal Heat",
+        "format": "TV",
+        "episodes": 12,
+        "year": 2025,
+        "release_status": "RELEASING",
+        "synopsis": "深潜队在海沟热泉附近发现废弃观测站，仪器仍在记录未知生物的脉搏。",
+        "cover_index": 1,
+        "is_adult": False,
+        "platform_mean": 8.0,
+    },
+    {
+        "mal_id": 1112,
+        "title_zh": "轨道尽头 第二航段",
+        "title_native": "軌道の果て 第二航段",
+        "title_en": "At Orbit's End: Passage II",
+        "format": "TV",
+        "episodes": 12,
+        "year": 2026,
+        "release_status": "NOT_YET_RELEASED",
+        "synopsis": "空间站抵达外环后，船员必须决定是否继续一条没有返程窗口的航线。",
+        "cover_index": 4,
+        "is_adult": False,
+        "platform_mean": None,
+    },
+]
+
+RELATIONS = [
+    {"source_mal_id": 1105, "target_mal_id": 1112, "relation_type": "SEQUEL"},
+    {"source_mal_id": 1112, "target_mal_id": 1105, "relation_type": "PREQUEL"},
+]
+
+
+@dataclass(frozen=True)
+class DemoRating:
+    user_id: int
+    mal_id: int
+    rating: float
+
+
+def build_training_ratings() -> list[DemoRating]:
+    """Create a deterministic preference matrix with minority taste clusters."""
+    profiles = [
+        [9, 9, 7, 6, 9, 8, 8, 9, 8, 7, 9, 8],
+        [8, 9, 6, 7, 9, 8, 9, 8, 8, 6, 8, 8],
+        [9, 8, 7, 5, 10, 8, 8, 9, 7, 7, 9, 9],
+        [8, 9, 8, 6, 9, 9, 7, 8, 8, 7, 9, 8],
+        [9, 8, 6, 7, 8, 9, 8, 9, 8, 6, 8, 8],
+        [7, 8, 9, 5, 8, 7, 9, 8, 7, 8, 9, 7],
+        [6, 5, 9, 8, 7, 6, 8, 7, 6, 9, 7, 6],
+        [5, 6, 8, 9, 6, 7, 8, 7, 6, 9, 6, 5],
+        [6, 6, 9, 8, 7, 5, 9, 6, 7, 8, 7, 6],
+        [5, 7, 8, 9, 6, 6, 8, 7, 7, 9, 6, 5],
+        [7, 6, 9, 8, 6, 7, 9, 6, 6, 8, 7, 6],
+        [6, 5, 8, 10, 7, 6, 7, 7, 6, 9, 6, 5],
+        [4, 7, 6, 9, 5, 8, 6, 8, 7, 9, 7, 6],
+        [5, 7, 5, 9, 6, 8, 6, 9, 7, 8, 8, 7],
+        [4, 8, 6, 8, 5, 9, 7, 9, 8, 8, 7, 6],
+        [5, 7, 5, 9, 6, 8, 6, 8, 7, 9, 8, 7],
+        [4, 8, 6, 8, 5, 9, 7, 9, 8, 8, 7, 6],
+        [5, 7, 5, 9, 6, 8, 6, 8, 7, 9, 8, 7],
+        [8, 6, 7, 7, 9, 5, 6, 6, 9, 6, 8, 9],
+        [9, 5, 6, 7, 9, 5, 7, 6, 9, 6, 8, 9],
+        [8, 6, 7, 6, 10, 5, 6, 7, 8, 6, 9, 9],
+        [9, 5, 6, 7, 9, 6, 7, 6, 9, 5, 8, 9],
+        [8, 6, 6, 8, 9, 5, 6, 7, 9, 6, 9, 8],
+        [9, 6, 7, 6, 9, 5, 7, 6, 8, 6, 8, 9],
+    ]
+    ratings: list[DemoRating] = []
+    ids = [item["mal_id"] for item in ANIME]
+    for user_index, scores in enumerate(profiles, start=10001):
+        for mal_id, score in zip(ids, scores, strict=True):
+            ratings.append(DemoRating(user_index, mal_id, float(score)))
+    return ratings
+
+
+DEMO_PROFILE_RATINGS = [
+    {"mal_id": 1101, "rating": 9.0, "status": "completed"},
+    {"mal_id": 1102, "rating": 9.0, "status": "completed"},
+    {"mal_id": 1103, "rating": 6.0, "status": "completed"},
+    {"mal_id": 1104, "rating": 6.0, "status": "completed"},
+    {"mal_id": 1106, "rating": 8.0, "status": "completed"},
+    {"mal_id": 1108, "rating": 9.0, "status": "completed"},
+]

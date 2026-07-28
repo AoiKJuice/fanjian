@@ -1,0 +1,25 @@
+FROM node:22-alpine AS builder
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm config set registry https://registry.npmmirror.com && npm ci
+
+COPY . .
+ARG NEXT_PUBLIC_BASE_PATH=/tools/anime-affinity/app
+ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
+RUN npm run build
+RUN npm prune --omit=dev
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV NEXT_PUBLIC_BASE_PATH=/tools/anime-affinity/app
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/scripts/local-server.mjs ./scripts/local-server.mjs
+
+EXPOSE 3000
+CMD ["npm", "run", "start"]
