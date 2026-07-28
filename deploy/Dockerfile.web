@@ -6,11 +6,7 @@ RUN npm config set registry https://registry.npmmirror.com && npm ci
 
 COPY . .
 ARG NEXT_PUBLIC_BASE_PATH=/tools/anime-affinity/app
-ARG NEXT_PUBLIC_API_URL=/tools/anime-affinity/api/v1
-ARG NEXT_PUBLIC_SERVER_MODE=1
 ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_SERVER_MODE=$NEXT_PUBLIC_SERVER_MODE
 RUN npm run build
 RUN npm prune --omit=dev
 
@@ -19,8 +15,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV NEXT_PUBLIC_BASE_PATH=/tools/anime-affinity/app
-ENV NEXT_PUBLIC_API_URL=/tools/anime-affinity/api/v1
-ENV NEXT_PUBLIC_SERVER_MODE=1
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules

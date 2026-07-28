@@ -1,32 +1,10 @@
 services:
-  fanjian-api:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.api
-    container_name: fanjian-api
-    environment:
-      ANIME_MODEL_PATH: /model
-      ANIME_DB_PATH: /runtime/anime.db
-      ANIME_MULTI_TENANT: "1"
-      ANIME_COOKIE_SECURE: "1"
-      ANIME_RECOMMENDATION_CONCURRENCY: "1"
-      ANIME_RECOMMENDATIONS_PER_MINUTE: "6"
-    volumes:
-      - /opt/fanjian-model/anime-model-open-2026-27:/model:ro
-      - /opt/fanjian-runtime:/runtime
-    ports:
-      - "127.0.0.1:8010:8000"
-    mem_limit: 1200m
-    restart: unless-stopped
-
   fanjian-web:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.web
       args:
         NEXT_PUBLIC_BASE_PATH: /tools/anime-affinity/app
-        NEXT_PUBLIC_API_URL: /tools/anime-affinity/api/v1
-        NEXT_PUBLIC_SERVER_MODE: "1"
     container_name: fanjian-web
     ports:
       - "127.0.0.1:3010:3000"
