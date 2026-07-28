@@ -57,12 +57,15 @@ export function RecommendationCard({
               <Star size={14} weight="fill" aria-hidden />
               Bangumi {item.anime.bangumi_score?.toFixed(1) ?? "暂无"}
             </span>
-            {matchedTags.length > 0 && (
-              <ul className="matched-tags" aria-label="命中喜爱作品标签">
-                {matchedTags.map((tag) => <li key={tag}>{tag}</li>)}
-              </ul>
-            )}
           </div>
+          {matchedTags.length > 0 && (
+            <ul
+              className="matched-tags card-tags"
+              aria-label="命中喜爱作品标签"
+            >
+              {matchedTags.map((tag) => <li key={tag}>{tag}</li>)}
+            </ul>
+          )}
         </div>
         <div className="compact-affinity">
           <strong>{item.affinity}</strong>
@@ -95,20 +98,20 @@ export function RecommendationCard({
         <Link href={`/recommendations/${runId}/${item.anime.mal_id}`}>
           <h3>{item.anime.title_zh}</h3>
         </Link>
-        {item.anime.title_native ? (
-          <p className="native-title">{item.anime.title_native}</p>
-        ) : null}
         <div className="recommendation-metadata">
           <span className="bangumi-score">
             <Star size={15} weight="fill" aria-hidden />
             Bangumi {item.anime.bangumi_score?.toFixed(1) ?? "暂无"}
           </span>
-          {matchedTags.length > 0 && (
-            <ul className="matched-tags" aria-label="命中喜爱作品标签">
-              {matchedTags.map((tag) => <li key={tag}>{tag}</li>)}
-            </ul>
-          )}
         </div>
+        {matchedTags.length > 0 && (
+          <ul
+            className="matched-tags card-tags"
+            aria-label="命中喜爱作品标签"
+          >
+            {matchedTags.map((tag) => <li key={tag}>{tag}</li>)}
+          </ul>
+        )}
       </div>
       <div className="card-actions" aria-label={`${item.anime.title_zh}操作`}>
         <button

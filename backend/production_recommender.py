@@ -23,25 +23,143 @@ class DiskBackedUserKNN:
     """Memory-mapped positive UserKNN for the full ratings corpus."""
 
     GENRE_LABELS = {
-        "Action": "动作",
-        "Adventure": "冒险",
-        "Avant Garde": "先锋",
-        "Award Winning": "获奖",
-        "Boys Love": "耽美",
-        "Comedy": "喜剧",
-        "Drama": "剧情",
-        "Fantasy": "奇幻",
-        "Girls Love": "百合",
-        "Gourmet": "美食",
-        "Horror": "恐怖",
-        "Mystery": "悬疑",
-        "Romance": "恋爱",
-        "Sci-Fi": "科幻",
-        "Slice of Life": "日常",
-        "Sports": "运动",
-        "Supernatural": "超自然",
-        "Suspense": "惊悚",
-        "Ecchi": "卖肉",
+        "action": "动作",
+        "adventure": "冒险",
+        "avant garde": "先锋",
+        "boys love": "耽美",
+        "comedy": "喜剧",
+        "coming of age": "成长",
+        "crime": "犯罪",
+        "cute girls doing cute things": "萌系日常",
+        "dark fantasy": "黑暗奇幻",
+        "detective": "侦探",
+        "drama": "剧情",
+        "ecchi": "卖肉",
+        "family life": "家庭",
+        "fantasy": "奇幻",
+        "female ensemble": "女性群像",
+        "friendship": "友情",
+        "game": "游戏",
+        "girls love": "百合",
+        "gourmet": "美食",
+        "historical": "历史",
+        "horror": "恐怖",
+        "idol": "偶像",
+        "isekai": "异世界",
+        "iyashikei": "治愈",
+        "magic": "魔法",
+        "magical girl": "魔法少女",
+        "martial arts": "武术",
+        "mecha": "机甲",
+        "military": "军事",
+        "music": "音乐",
+        "mystery": "悬疑",
+        "mythology": "神话",
+        "parody": "恶搞",
+        "post-apocalyptic": "末世",
+        "psychological": "心理",
+        "romance": "恋爱",
+        "samurai": "武士",
+        "school": "校园",
+        "sci-fi": "科幻",
+        "slice of life": "日常",
+        "space": "太空",
+        "sports": "运动",
+        "supernatural": "超自然",
+        "survival": "生存",
+        "suspense": "惊悚",
+        "time travel": "时间旅行",
+        "urban fantasy": "都市奇幻",
+        "vampire": "吸血鬼",
+    }
+    TAG_ALIASES = {
+        "action": "action",
+        "adventure": "adventure",
+        "avant garde": "avant garde",
+        "boys love": "boys love",
+        "shounen ai": "boys love",
+        "comedy": "comedy",
+        "coming of age": "coming of age",
+        "coming-of-age": "coming of age",
+        "crime": "crime",
+        "cute girls doing cute things": "cute girls doing cute things",
+        "cgdct": "cute girls doing cute things",
+        "dark fantasy": "dark fantasy",
+        "detective": "detective",
+        "detectives": "detective",
+        "drama": "drama",
+        "ecchi": "ecchi",
+        "family life": "family life",
+        "fantasy": "fantasy",
+        "primarily female cast": "female ensemble",
+        "predominantly female cast": "female ensemble",
+        "female ensemble": "female ensemble",
+        "friendship": "friendship",
+        "game": "game",
+        "games": "game",
+        "girls love": "girls love",
+        "shoujo ai": "girls love",
+        "yuri": "girls love",
+        "gourmet": "gourmet",
+        "cooking": "gourmet",
+        "historical": "historical",
+        "horror": "horror",
+        "idol": "idol",
+        "idols": "idol",
+        "isekai": "isekai",
+        "iyashikei": "iyashikei",
+        "healing": "iyashikei",
+        "magic": "magic",
+        "magical girl": "magical girl",
+        "mahou shoujo": "magical girl",
+        "martial arts": "martial arts",
+        "mecha": "mecha",
+        "military": "military",
+        "music": "music",
+        "mystery": "mystery",
+        "mythology": "mythology",
+        "parody": "parody",
+        "post-apocalyptic": "post-apocalyptic",
+        "post apocalyptic": "post-apocalyptic",
+        "psychological": "psychological",
+        "romance": "romance",
+        "samurai": "samurai",
+        "school": "school",
+        "school life": "school",
+        "high school": "school",
+        "sci-fi": "sci-fi",
+        "sci fi": "sci-fi",
+        "science fiction": "sci-fi",
+        "science-fiction": "sci-fi",
+        "slice of life": "slice of life",
+        "daily life": "slice of life",
+        "space": "space",
+        "sports": "sports",
+        "supernatural": "supernatural",
+        "survival": "survival",
+        "suspense": "suspense",
+        "thriller": "suspense",
+        "time travel": "time travel",
+        "urban fantasy": "urban fantasy",
+        "vampire": "vampire",
+        "vampires": "vampire",
+    }
+    TAG_SPECIFICITY = {
+        "action": 0.72,
+        "adventure": 0.78,
+        "comedy": 0.68,
+        "drama": 0.68,
+        "fantasy": 0.72,
+        "romance": 0.78,
+        "sci-fi": 0.82,
+        "supernatural": 0.82,
+        "cute girls doing cute things": 1.8,
+        "female ensemble": 1.1,
+        "girls love": 2.0,
+        "iyashikei": 1.7,
+        "magical girl": 1.55,
+        "school": 0.9,
+        "slice of life": 1.1,
     }
 
     def __init__(
@@ -254,11 +372,20 @@ class DiskBackedUserKNN:
             values = json.loads(raw)
         except (TypeError, json.JSONDecodeError):
             values = [part.strip() for part in str(raw).split(",")]
-        return [
-            str(value)
-            for value in values
-            if value and str(value) != "Hentai"
-        ]
+        tags = []
+        seen = set()
+        for value in values:
+            normalized = re.sub(
+                r"\s+",
+                " ",
+                str(value).strip().casefold(),
+            )
+            canonical = self.TAG_ALIASES.get(normalized)
+            if canonical is None or canonical in seen:
+                continue
+            tags.append(canonical)
+            seen.add(canonical)
+        return tags
 
     def _liked_genre_weights(
         self, ratings: dict[int, float]
@@ -286,7 +413,11 @@ class DiskBackedUserKNN:
         genres = self._genres_for_item(item_idx)
         ranked = sorted(
             (genre for genre in genres if liked_genres[genre] > 0),
-            key=lambda genre: (-liked_genres[genre], genres.index(genre)),
+            key=lambda genre: (
+                -self.TAG_SPECIFICITY.get(genre, 1.0)
+                * (1 + min(liked_genres[genre], 5) / 5),
+                genres.index(genre),
+            ),
         )
         return [self.GENRE_LABELS.get(genre, genre) for genre in ranked[:3]]
 

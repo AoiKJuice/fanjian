@@ -1,3 +1,8 @@
+from collections import Counter
+
+import polars as pl
+
+from backend.production_recommender import DiskBackedUserKNN
 from backend.recommender import SurpriseUserKNN
 
 
@@ -27,3 +32,57 @@ def test_series_filter_is_optional():
     assert 1112 not in [item["anime"]["mal_id"] for item in blocked]
     allowed = model.recommend(ratings, min_support=3, allow_sequels=True)
     assert 1112 in [item["anime"]["mal_id"] for item in allowed]
+
+
+def test_display_tags_are_curated_deduplicated_and_chinese():
+    model = DiskBackedUserKNN.__new__(DiskBackedUserKNN)
+    model.catalog = pl.DataFrame(
+        {
+            "genres": [
+                (
+                    '["japanese production", "place", "comedy", '
+                    '"Comedy", "school life", "girls love", '
+                    '"primarily female cast"]'
+                )
+            ]
+        }
+    )
+
+    assert model._genres_for_item(0) == [
+        "comedy",
+        "school",
+        "girls love",
+        "female ensemble",
+    ]
+    assert model._matched_tags(
+        0,
+        Counter(
+            {
+                "comedy": 8,
+                "school": 6,
+                "girls love": 5,
+                "female ensemble": 4,
+            }
+        ),
+    ) == ["百合", "女性群像", "校园"]
+
+
+def test_display_tags_merge_common_aliases():
+    model = DiskBackedUserKNN.__new__(DiskBackedUserKNN)
+    model.catalog = pl.DataFrame(
+        {
+            "genres": [
+                (
+                    '["science fiction", "sci fi", "daily life", '
+                    '"shoujo ai", "cgdct", "japanese production"]'
+                )
+            ]
+        }
+    )
+
+    assert model._genres_for_item(0) == [
+        "sci-fi",
+        "slice of life",
+        "girls love",
+        "cute girls doing cute things",
+    ]

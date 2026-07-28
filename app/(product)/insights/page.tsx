@@ -4,7 +4,6 @@ import {
   ChartLineUp,
   Compass,
   Eye,
-  UsersThree,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
@@ -51,7 +50,7 @@ export default function InsightsPage() {
   )[0]?.[0];
 
   return (
-    <div className="page">
+    <div className="page insights-page">
       <PageHeader
         title="审美分析"
       />
@@ -90,23 +89,23 @@ export default function InsightsPage() {
         </section>
 
         <section className="section-block signal-card">
-          <Compass size={26} weight="duotone" />
-          <p className="eyebrow">主流倾向指数</p>
-          <strong>{insights.mainstream_index}</strong>
-          <h2>{insights.mainstream_index >= 67 ? "观看较集中于高关注作品" : insights.mainstream_index <= 33 ? "观看较偏长尾" : "主流与长尾较均衡"}</h2>
-        </section>
-
-        <section className="section-block">
-          <div className="section-heading">
-            <div><p className="eyebrow">资料区分度</p><h2>{insights.quality}质量评分资料</h2></div>
-            <Eye size={24} weight="duotone" />
+          <div className="signal-card-heading">
+            <p className="eyebrow">主流倾向指数</p>
+            <Compass size={26} weight="duotone" />
+          </div>
+          <div className="signal-card-body">
+            <strong>{insights.mainstream_index}</strong>
+            <h2>{insights.mainstream_index >= 67 ? "观看较集中于高关注作品" : insights.mainstream_index <= 33 ? "观看较偏长尾" : "主流与长尾较均衡"}</h2>
           </div>
         </section>
 
-        <section className="section-block">
-          <div className="section-heading">
-            <div><p className="eyebrow">相似用户质量</p><h2>共同评分覆盖</h2></div>
-            <UsersThree size={24} weight="duotone" />
+        <section className="section-block signal-card">
+          <div className="signal-card-heading">
+            <p className="eyebrow">资料区分度</p>
+            <Eye size={26} weight="duotone" />
+          </div>
+          <div className="signal-card-body">
+            <h2>{insights.quality}质量评分资料</h2>
           </div>
         </section>
       </div>
