@@ -257,8 +257,16 @@ kbd { padding: 2px 6px; background: var(--surface-muted); border: 1px solid var(
 .recommendation-list .compact-affinity { position: static; display: flex; flex-direction: column; align-items: end; padding: 0 14px; }
 .compact-affinity strong { font-size: 1.7rem; }
 .compact-affinity span { color: var(--text-soft); font-size: .7rem; }
-.recommendation-card { display: flex; width: 100%; max-width: 250px; min-width: 0; flex-direction: column; align-self: start; background: var(--surface); border-radius: var(--radius); overflow: hidden; transition: transform 180ms ease, box-shadow 180ms ease; }
+.recommendation-card { position: relative; display: flex; width: 100%; max-width: 250px; min-width: 0; flex-direction: column; align-self: start; background: var(--surface); border-radius: var(--radius); overflow: hidden; animation: recommendation-card-enter 220ms ease both; transition: transform 180ms ease, box-shadow 180ms ease; }
 .recommendation-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.recommendation-card > :not(.hide-undo-layer) { opacity: 1; transform: scale(1); transition: opacity 180ms ease, transform 180ms ease; }
+.recommendation-card.is-hide-pending:hover { transform: none; box-shadow: none; }
+.recommendation-card.is-hide-pending > :not(.hide-undo-layer) { pointer-events: none; opacity: .12; transform: scale(.975); }
+.hide-undo-layer { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 18px; padding: 26px; background: var(--surface); color: var(--text); text-align: center; animation: hide-undo-enter 180ms ease both; }
+.hide-undo-layer strong { font-size: 1.05rem; font-weight: 800; }
+.hide-undo-layer .button { min-width: 112px; justify-content: center; }
+.hide-undo-icon { display: grid; width: 54px; height: 54px; place-items: center; background: var(--accent-soft); border-radius: 50%; color: var(--accent); }
+.hide-undo-layer.is-committing .hide-undo-icon { animation: hide-undo-pulse 900ms ease-in-out infinite alternate; }
 .cover-link { position: relative; display: block; }
 .cover-link .anime-cover { width: 100%; border-radius: 0; box-shadow: none; }
 .affinity-stamp { position: absolute; right: 12px; bottom: 12px; display: grid; width: 62px; height: 62px; place-items: center; align-content: center; background: rgba(255, 255, 255, .93); color: #241f1c; border-radius: 50%; box-shadow: 0 4px 18px rgba(0, 0, 0, .2); }
@@ -570,6 +578,9 @@ kbd { padding: 2px 6px; background: var(--surface-muted); border: 1px solid var(
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes drawer-in { from { transform: translateX(30px); opacity: 0; } }
 @keyframes skeleton-shift { to { background-position: -220% 0; } }
+@keyframes recommendation-card-enter { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+@keyframes hide-undo-enter { from { opacity: 0; transform: scale(.985); } }
+@keyframes hide-undo-pulse { to { transform: scale(1.08); } }
 
 @media (max-width: 1180px) {
   .unmapped-grid { grid-template-columns: 1fr; }

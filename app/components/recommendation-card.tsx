@@ -1,14 +1,17 @@
 "use client";
 
 import {
+  ArrowCounterClockwise,
   BookmarkSimple,
   EyeSlash,
   Star,
 } from "@phosphor-icons/react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Recommendation } from "../lib/data";
 import { AnimeCover } from "./anime-cover";
+
+const HIDE_UNDO_DELAY_MS = 3200;
 
 export function RecommendationCard({
   item,
@@ -24,12 +27,41 @@ export function RecommendationCard({
     malId: number,
   ) => Promise<void>;
 }) {
-  const [feedback, setFeedback] = useState<"favorite" | "hide" | null>(null);
-  const [pending, setPending] = useState<"favorite" | "hide" | null>(null);
+  const [feedback, setFeedback] = useState<"favorite" | null>(null);
+  const [pending, setPending] = useState<"favorite" | null>(null);
+  const [hidePhase, setHidePhase] = useState<
+    "idle" | "undo" | "committing"
+  >("idle");
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const matchedTags = item.anime.matched_tags?.slice(0, 3) ?? [];
 
-  if (feedback === "hide") {
-    return null;
+  useEffect(
+    () => () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    },
+    [],
+  );
+
+  function undoHide() {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+    setHidePhase("idle");
+  }
+
+  function beginHide() {
+    if (hidePhase !== "idle" || pending !== null) return;
+    setHidePhase("undo");
+    hideTimer.current = setTimeout(() => {
+      hideTimer.current = null;
+      setHidePhase("committing");
+      if (!onFeedback) {
+        setHidePhase("idle");
+        return;
+      }
+      void onFeedback("hide", item.anime.mal_id).catch(() => {
+        setHidePhase("idle");
+      });
+    }, HIDE_UNDO_DELAY_MS);
   }
 
   if (compact) {
@@ -73,10 +105,15 @@ export function RecommendationCard({
   }
 
   return (
-    <article className="recommendation-card">
+    <article
+      className={`recommendation-card${
+        hidePhase === "idle" ? "" : " is-hide-pending"
+      }`}
+    >
       <Link
         className="cover-link"
         href={`/recommendations/${runId}/${item.anime.mal_id}`}
+        tabIndex={hidePhase === "idle" ? undefined : -1}
       >
         <AnimeCover
           index={item.anime.cover_index}
@@ -92,7 +129,10 @@ export function RecommendationCard({
         <div className="card-kicker">
           {item.anime.year} · {item.anime.format} · {item.anime.episodes} 集
         </div>
-        <Link href={`/recommendations/${runId}/${item.anime.mal_id}`}>
+        <Link
+          href={`/recommendations/${runId}/${item.anime.mal_id}`}
+          tabIndex={hidePhase === "idle" ? undefined : -1}
+        >
           <h3>{item.anime.title_zh}</h3>
         </Link>
         <div className="recommendation-metadata">
@@ -113,7 +153,7 @@ export function RecommendationCard({
       <div className="card-actions" aria-label={`${item.anime.title_zh}操作`}>
         <button
           className={feedback === "favorite" ? "selected" : ""}
-          disabled={pending !== null}
+          disabled={pending !== null || hidePhase !== "idle"}
           onClick={() => {
             const next = feedback === "favorite" ? null : "favorite";
             setFeedback(next);
@@ -136,21 +176,41 @@ export function RecommendationCard({
               : "想看"}
         </button>
         <button
-          disabled={pending !== null}
-          onClick={() => {
-            setPending("hide");
-            setFeedback("hide");
-            if (onFeedback) {
-              void onFeedback("hide", item.anime.mal_id)
-                .catch(() => setFeedback(null))
-                .finally(() => setPending(null));
-            }
-          }}
+          disabled={pending !== null || hidePhase !== "idle"}
+          onClick={beginHide}
         >
           <EyeSlash size={18} />
-          {pending === "hide" ? "更新中…" : "不感兴趣"}
+          不感兴趣
         </button>
       </div>
+      {hidePhase !== "idle" && (
+        <div
+          className={`hide-undo-layer${
+            hidePhase === "committing" ? " is-committing" : ""
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="hide-undo-icon" aria-hidden>
+            <EyeSlash size={28} weight="duotone" />
+          </span>
+          <strong>
+            {hidePhase === "committing"
+              ? "正在更新推荐"
+              : "已标记不感兴趣"}
+          </strong>
+          {hidePhase === "undo" && (
+            <button
+              type="button"
+              className="button secondary"
+              onClick={undoHide}
+            >
+              <ArrowCounterClockwise size={18} />
+              撤回
+            </button>
+          )}
+        </div>
+      )}
     </article>
   );
 }

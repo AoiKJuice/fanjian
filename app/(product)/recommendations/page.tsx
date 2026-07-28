@@ -8,13 +8,14 @@ import {
 } from "@phosphor-icons/react";
 import { Dialog } from "radix-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { RecommendationCard } from "../../components/recommendation-card";
 import { ThemeSelect } from "../../components/theme-select";
 import { StatePanel } from "../../components/ui";
 import {
   loadRecommendations,
   loadProfiles,
+  removeCollectionItem,
   sendRecommendationFeedback,
 } from "../../lib/api";
 
@@ -24,10 +25,6 @@ export default function RecommendationsPage() {
   const [format, setFormat] = useState("全部");
   const [minimum, setMinimum] = useState(0);
   const [sort, setSort] = useState("推荐分数");
-  const [locallyHidden, setLocallyHidden] = useState<Set<number>>(
-    () => new Set(),
-  );
-  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
     queryFn: loadProfiles,
@@ -44,63 +41,42 @@ export default function RecommendationsPage() {
   const filtered = useMemo(() => {
     const items = recommendations.filter(
       (item) =>
-        !locallyHidden.has(item.anime.mal_id) &&
         (format === "全部" || item.anime.format === format) &&
         item.support >= minimum,
     );
     if (sort === "年份") return [...items].sort((a, b) => b.anime.year - a.anime.year);
     if (sort === "支持人数") return [...items].sort((a, b) => b.support - a.support);
     return items;
-  }, [format, locallyHidden, minimum, recommendations, sort]);
-
-  const scheduleRefresh = useCallback(() => {
-    if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    refreshTimer.current = setTimeout(() => {
-      void recommendationsQuery.refetch().then((result) => {
-        if (!result.error) {
-          setLocallyHidden(new Set());
-          void queryClient.invalidateQueries({
-            queryKey: ["dashboard-recommendations", profileId],
-          });
-          void queryClient.invalidateQueries({
-            queryKey: ["recommendation-history", profileId],
-          });
-        }
-      });
-    }, 1500);
-  }, [profileId, queryClient, recommendationsQuery]);
-
-  useEffect(
-    () => () => {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    },
-    [],
-  );
+  }, [format, minimum, recommendations, sort]);
 
   const handleFeedback = useCallback(
     async (action: "favorite" | "hide", malId: number) => {
       if (!data) return;
+      await sendRecommendationFeedback(data.runId, malId, action);
       if (action === "hide") {
-        setLocallyHidden((current) => new Set(current).add(malId));
-      }
-      try {
-        await sendRecommendationFeedback(data.runId, malId, action);
-      } catch (error) {
-        if (action === "hide") {
-          setLocallyHidden((current) => {
-            const next = new Set(current);
-            next.delete(malId);
-            return next;
-          });
+        const refreshed = await recommendationsQuery.refetch();
+        if (refreshed.error) {
+          if (profileId) {
+            await removeCollectionItem(
+              profileId,
+              "hidden",
+              malId,
+            ).catch(() => undefined);
+          }
+          throw refreshed.error;
         }
-        throw error;
       }
       void queryClient.invalidateQueries({
         queryKey: ["profile-collections", profileId],
       });
-      if (action === "hide") scheduleRefresh();
+      void queryClient.invalidateQueries({
+        queryKey: ["dashboard-recommendations", profileId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["recommendation-history", profileId],
+      });
     },
-    [data, profileId, queryClient, scheduleRefresh],
+    [data, profileId, queryClient, recommendationsQuery],
   );
 
   return (
@@ -192,7 +168,7 @@ export default function RecommendationsPage() {
         <div className={view === "grid" ? "recommendation-grid" : "recommendation-list"}>
           {filtered.map((item) => (
             <RecommendationCard
-              key={item.anime.mal_id}
+              key={`${data?.runId}-${item.anime.mal_id}`}
               item={item}
               compact={view === "list"}
               runId={data?.runId}

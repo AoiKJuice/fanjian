@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowCounterClockwise,
   ArrowLeft,
   BookmarkSimple,
   ChartBar,
@@ -12,7 +13,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimeCover } from "../../../../components/anime-cover";
 import { StatePanel } from "../../../../components/ui";
 import {
@@ -22,6 +23,8 @@ import {
   removeCollectionItem,
   sendRecommendationFeedback,
 } from "../../../../lib/api";
+
+const HIDE_UNDO_DELAY_MS = 3200;
 
 export default function RecommendationDetailPage() {
   const queryClient = useQueryClient();
@@ -33,6 +36,10 @@ export default function RecommendationDetailPage() {
   const [pendingCollection, setPendingCollection] = useState<
     "favorites" | "hidden" | null
   >(null);
+  const [hidePhase, setHidePhase] = useState<
+    "idle" | "undo" | "committing"
+  >("idle");
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState(false);
   const runQuery = useQuery({
@@ -60,6 +67,29 @@ export default function RecommendationDetailPage() {
     ),
   );
 
+  useEffect(
+    () => () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    },
+    [],
+  );
+
+  function undoHide() {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+    setHidePhase("idle");
+  }
+
+  function beginHide() {
+    if (hidePhase !== "idle" || pendingCollection) return;
+    setHidePhase("undo");
+    hideTimer.current = setTimeout(() => {
+      hideTimer.current = null;
+      setHidePhase("committing");
+      void toggleCollection("hidden");
+    }, HIDE_UNDO_DELAY_MS);
+  }
+
   async function toggleCollection(
     collection: "favorites" | "hidden",
   ) {
@@ -80,7 +110,6 @@ export default function RecommendationDetailPage() {
       }
       await collectionsQuery.refetch();
       if (collection === "hidden" && !active) {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
         const refreshed = await loadRecommendations(profileId);
         queryClient.setQueryData(
           ["recommendations", profileId],
@@ -109,6 +138,7 @@ export default function RecommendationDetailPage() {
       setActionMessage("保存失败，请重试");
     } finally {
       setPendingCollection(null);
+      if (collection === "hidden") setHidePhase("idle");
     }
   }
 
@@ -188,7 +218,7 @@ export default function RecommendationDetailPage() {
             <button
               className={`button secondary${isFavorite ? " collection-active" : ""}`}
               aria-pressed={isFavorite}
-              disabled={pendingCollection !== null}
+              disabled={pendingCollection !== null || hidePhase !== "idle"}
               onClick={() => void toggleCollection("favorites")}
             >
               <BookmarkSimple
@@ -202,13 +232,37 @@ export default function RecommendationDetailPage() {
                   : "想看"}
             </button>
             <button
-              className={`button secondary${isHidden ? " collection-active" : ""}`}
-              aria-pressed={isHidden}
-              disabled={pendingCollection !== null}
-              onClick={() => void toggleCollection("hidden")}
+              className={`button secondary${
+                isHidden || hidePhase === "undo"
+                  ? " collection-active"
+                  : ""
+              }`}
+              aria-pressed={isHidden || hidePhase === "undo"}
+              disabled={
+                pendingCollection !== null || hidePhase === "committing"
+              }
+              onClick={() => {
+                if (hidePhase === "undo") {
+                  undoHide();
+                } else if (isHidden) {
+                  void toggleCollection("hidden");
+                } else {
+                  beginHide();
+                }
+              }}
             >
-              <EyeSlash size={18} weight={isHidden ? "fill" : "regular"} />
-              {pendingCollection === "hidden"
+              {hidePhase === "undo" ? (
+                <ArrowCounterClockwise size={18} />
+              ) : (
+                <EyeSlash
+                  size={18}
+                  weight={isHidden ? "fill" : "regular"}
+                />
+              )}
+              {hidePhase === "undo"
+                ? "撤回"
+                : pendingCollection === "hidden" ||
+                    hidePhase === "committing"
                 ? "更新中…"
                 : isHidden
                   ? "已忽略"
