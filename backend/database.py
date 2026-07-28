@@ -811,8 +811,9 @@ class Database:
         with self.connection() as db:
             if query:
                 pattern = f"%{query}%"
-                where = """
-                    WHERE lower(
+                numeric_id = int(query) if query.isdigit() else None
+                title_match = """
+                    lower(
                         coalesce(json_extract(payload, '$.title_zh'), '')
                         || ' ' ||
                         coalesce(json_extract(payload, '$.title_native'), '')
@@ -820,20 +821,40 @@ class Database:
                         coalesce(json_extract(payload, '$.title_en'), '')
                     ) LIKE ?
                 """
+                where = (
+                    f"WHERE mal_id = ? OR {title_match}"
+                    if numeric_id is not None
+                    else f"WHERE {title_match}"
+                )
+                search_params: tuple = (
+                    (numeric_id, pattern)
+                    if numeric_id is not None
+                    else (pattern,)
+                )
                 total = int(
                     db.execute(
                         f"SELECT count(*) FROM anime {where}",
-                        (pattern,),
+                        search_params,
                     ).fetchone()[0]
+                )
+                order = (
+                    "CASE WHEN mal_id = ? THEN 0 ELSE 1 END, mal_id"
+                    if numeric_id is not None
+                    else "mal_id"
+                )
+                row_params = (
+                    (*search_params, numeric_id, limit, offset)
+                    if numeric_id is not None
+                    else (*search_params, limit, offset)
                 )
                 rows = db.execute(
                     f"""
                     SELECT payload FROM anime
                     {where}
-                    ORDER BY mal_id
+                    ORDER BY {order}
                     LIMIT ? OFFSET ?
                     """,
-                    (pattern, limit, offset),
+                    row_params,
                 ).fetchall()
             else:
                 total = int(

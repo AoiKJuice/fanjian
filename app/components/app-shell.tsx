@@ -7,18 +7,17 @@ import {
   Gear,
   House,
   Infinity,
-  MagnifyingGlass,
   Moon,
   Sparkle,
   Sun,
   UserCircle,
 } from "@phosphor-icons/react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { FormEvent } from "react";
+import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { loadProfiles } from "../lib/api";
 import { useTheme } from "../providers";
+import { GlobalCatalogSearch } from "./catalog-add";
 import { LocalModelGate } from "./local-model-gate";
 
 const nav = [
@@ -31,19 +30,13 @@ const nav = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
     queryFn: loadProfiles,
   });
+  const profileId = profilesQuery.data?.[0]?.id;
   const profileName = profilesQuery.data?.[0]?.name ?? "本地资料";
-
-  function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const query = new FormData(event.currentTarget).get("q");
-    if (query) router.push(`/library?q=${encodeURIComponent(String(query))}`);
-  }
 
   return (
     <div className="app-shell">
@@ -81,14 +74,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             设置
           </Link>
         </div>
-      </aside>
+        </aside>
 
       <div className="workspace">
         <header className="topbar">
-          <form className="global-search" role="search" onSubmit={search}>
-            <MagnifyingGlass size={19} aria-hidden />
-            <input name="q" placeholder="搜索番剧、原名或 MAL ID" aria-label="全局番剧搜索" />
-          </form>
+          <GlobalCatalogSearch profileId={profileId} />
           <div className="topbar-actions">
             <button
               className="icon-button"

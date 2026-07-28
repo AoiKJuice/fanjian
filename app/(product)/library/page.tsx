@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimeCover } from "../../components/anime-cover";
+import { CatalogAddDialog } from "../../components/catalog-add";
 import { RatingControl } from "../../components/rating-control";
 import { ThemeSelect } from "../../components/theme-select";
 import { PageHeader, StatePanel } from "../../components/ui";
@@ -203,6 +204,32 @@ export default function LibraryPage() {
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!profileId) return;
+    const refreshLibrary = () => {
+      void loadLibrary(profileId)
+        .then((library) => {
+          setRows((current) => {
+            const currentById = new Map(
+              current.map((item) => [item.mal_id, item]),
+            );
+            return library.map((item) =>
+              changedIds.has(item.mal_id)
+                ? currentById.get(item.mal_id) ?? item
+                : item,
+            );
+          });
+        })
+        .catch((reason: Error) => setError(reason.message));
+    };
+    window.addEventListener("anime-library-changed", refreshLibrary);
+    return () =>
+      window.removeEventListener(
+        "anime-library-changed",
+        refreshLibrary,
+      );
+  }, [changedIds, profileId]);
 
   async function removeSavedItem(malId: number) {
     if (!profileId || section === "ratings") return;
@@ -441,9 +468,12 @@ export default function LibraryPage() {
       <PageHeader
         title="我的片库"
         actions={
-          <Link className="button secondary" href="/onboarding">
-            <UploadSimple size={18} /> 导入并预览
-          </Link>
+          <div className="library-header-actions">
+            <CatalogAddDialog profileId={profileId} />
+            <Link className="button secondary" href="/onboarding">
+              <UploadSimple size={18} /> 导入并预览
+            </Link>
+          </div>
         }
       />
 

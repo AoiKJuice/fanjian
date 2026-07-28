@@ -108,6 +108,26 @@ def test_missing_profile_returns_404(tmp_path: Path, monkeypatch):
         assert response.status_code == 404
 
 
+def test_catalog_search_accepts_title_and_exact_mal_id(
+    tmp_path: Path, monkeypatch
+):
+    monkeypatch.setenv("ANIME_DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("ANIME_USE_DEMO", "1")
+    with TestClient(app) as client:
+        by_title = client.get(
+            "/api/v1/anime/search", params={"q": "鲸落之夏"}
+        )
+        assert by_title.status_code == 200
+        assert by_title.json()["items"][0]["mal_id"] == 1102
+
+        by_id = client.get(
+            "/api/v1/anime/search", params={"q": "1102"}
+        )
+        assert by_id.status_code == 200
+        assert by_id.json()["total"] == 1
+        assert by_id.json()["items"][0]["mal_id"] == 1102
+
+
 def test_profile_delete_removes_the_profile(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("ANIME_DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("ANIME_USE_DEMO", "1")
