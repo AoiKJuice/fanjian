@@ -17,13 +17,14 @@ import {
   loadProfiles,
   loadRecommendations,
 } from "../../lib/api";
+import { useActiveProfile } from "../../providers";
 
 export default function DashboardPage() {
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
     queryFn: loadProfiles,
   });
-  const profile = profilesQuery.data?.[0];
+  const profile = useActiveProfile(profilesQuery.data);
   const insightsQuery = useQuery({
     queryKey: ["insights", profile?.id],
     queryFn: () => loadInsights(profile!.id),

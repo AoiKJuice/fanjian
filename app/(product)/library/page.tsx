@@ -17,6 +17,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -42,6 +43,7 @@ import {
   type WatchStatus,
 } from "../../lib/api";
 import type { Anime } from "../../lib/data";
+import { useActiveProfile } from "../../providers";
 
 const statusLabels: Record<WatchStatus, string> = {
   completed: "已看完",
@@ -160,7 +162,12 @@ export default function LibraryPage() {
   const [view, setView] = useState<"table" | "covers">("table");
   const [query, setQuery] = useState(params.get("q") ?? "");
   const [status, setStatus] = useState<"all" | WatchStatus>("all");
-  const [profileId, setProfileId] = useState<number | null>(null);
+  const profilesQuery = useQuery({
+    queryKey: ["profiles"],
+    queryFn: loadProfiles,
+  });
+  const activeProfile = useActiveProfile(profilesQuery.data);
+  const profileId = activeProfile?.id ?? null;
   const [rows, setRows] = useState<LibraryItem[]>([]);
   const [unmappedRows, setUnmappedRows] = useState<ExternalLibraryItem[]>([]);
   const [collections, setCollections] = useState<ProfileCollections>({
@@ -188,22 +195,28 @@ export default function LibraryPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    loadProfiles()
-      .then(async (profiles) => {
-        if (!profiles.length) return;
-        setProfileId(profiles[0].id);
+    if (!profileId) {
+      setLoading(profilesQuery.isPending);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    Promise.resolve()
+      .then(async () => {
         const [library, unmapped, savedCollections] = await Promise.all([
-          loadLibrary(profiles[0].id),
-          loadUnmappedLibrary(profiles[0].id),
-          loadCollections(profiles[0].id),
+          loadLibrary(profileId),
+          loadUnmappedLibrary(profileId),
+          loadCollections(profileId),
         ]);
         setRows(library);
         setUnmappedRows(unmapped);
         setCollections(savedCollections);
+        setChangedIds(new Set());
+        setChangedExternalIds(new Set());
       })
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [profileId, profilesQuery.isPending]);
 
   useEffect(() => {
     if (!profileId) return;

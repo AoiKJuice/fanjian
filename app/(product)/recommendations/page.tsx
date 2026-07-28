@@ -18,6 +18,7 @@ import {
   removeCollectionItem,
   sendRecommendationFeedback,
 } from "../../lib/api";
+import { useActiveProfile } from "../../providers";
 
 export default function RecommendationsPage() {
   const queryClient = useQueryClient();
@@ -29,7 +30,7 @@ export default function RecommendationsPage() {
     queryKey: ["profiles"],
     queryFn: loadProfiles,
   });
-  const profile = profilesQuery.data?.[0];
+  const profile = useActiveProfile(profilesQuery.data);
   const profileId = profile?.id;
   const recommendationsQuery = useQuery({
     queryKey: ["recommendations", profileId],

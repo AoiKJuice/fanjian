@@ -2,7 +2,9 @@
 
 import {
   Books,
+  CaretDown,
   ChartDonut,
+  Check,
   ClockCounterClockwise,
   Gear,
   House,
@@ -14,9 +16,15 @@ import {
 } from "@phosphor-icons/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Popover } from "radix-ui";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { loadProfiles } from "../lib/api";
-import { useTheme } from "../providers";
+import {
+  selectActiveProfile,
+  useActiveProfile,
+  useTheme,
+} from "../providers";
 import { GlobalCatalogSearch } from "./catalog-add";
 import { LocalModelGate } from "./local-model-gate";
 
@@ -30,13 +38,15 @@ const nav = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
     queryFn: loadProfiles,
   });
-  const profileId = profilesQuery.data?.[0]?.id;
-  const profileName = profilesQuery.data?.[0]?.name ?? "本地资料";
+  const profile = useActiveProfile(profilesQuery.data);
+  const profileId = profile?.id;
+  const profileName = profile?.name ?? "本地资料";
 
   return (
     <div className="app-shell">
@@ -87,14 +97,60 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
             </button>
-            <Link
-              className="profile-switcher"
-              href="/settings"
-              aria-label={`当前资料${profileName}，打开设置`}
+            <Popover.Root
+              open={profileMenuOpen}
+              onOpenChange={setProfileMenuOpen}
             >
-              <UserCircle size={23} weight="duotone" />
-              <span>{profileName}</span>
-            </Link>
+              <Popover.Trigger asChild>
+                <button
+                  className="profile-switcher"
+                  aria-label={`当前资料${profileName}，切换资料`}
+                >
+                  <UserCircle size={23} weight="duotone" />
+                  <span>{profileName}</span>
+                  <CaretDown size={14} weight="bold" aria-hidden />
+                </button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content
+                  className="profile-menu"
+                  align="end"
+                  sideOffset={8}
+                  collisionPadding={12}
+                >
+                  <strong className="profile-menu-title">切换资料</strong>
+                  <div className="profile-menu-list">
+                    {profilesQuery.data?.map((item) => {
+                      const active = item.id === profileId;
+                      return (
+                        <button
+                          key={item.id}
+                          className={active ? "active" : ""}
+                          aria-pressed={active}
+                          onClick={() => {
+                            selectActiveProfile(item.id);
+                            setProfileMenuOpen(false);
+                          }}
+                        >
+                          <span className="profile-menu-avatar">
+                            {item.name.slice(0, 1)}
+                          </span>
+                          <strong>{item.name}</strong>
+                          {active && <Check size={17} weight="bold" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Link
+                    className="profile-menu-manage"
+                    href="/settings"
+                    onClick={() => setProfileMenuOpen(false)}
+                  >
+                    管理本地资料
+                  </Link>
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
           </div>
         </header>
         <main id="main-content">{children}</main>

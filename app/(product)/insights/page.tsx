@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { Metric, PageHeader, StatePanel } from "../../components/ui";
 import { loadInsights, loadProfiles } from "../../lib/api";
+import { useActiveProfile } from "../../providers";
 
 const InsightsChart = dynamic(
   () =>
@@ -22,7 +23,7 @@ export default function InsightsPage() {
     queryKey: ["profiles"],
     queryFn: loadProfiles,
   });
-  const profile = profilesQuery.data?.[0];
+  const profile = useActiveProfile(profilesQuery.data);
   const insightsQuery = useQuery({
     queryKey: ["insights", profile?.id],
     queryFn: () => loadInsights(profile!.id),

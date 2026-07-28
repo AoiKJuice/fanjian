@@ -10,6 +10,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { Profile } from "./lib/api";
 
 type Theme = "light" | "dark";
 
@@ -21,6 +22,8 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 const THEME_EVENT = "anime-theme-change";
+const ACTIVE_PROFILE_EVENT = "anime-active-profile-change";
+const ACTIVE_PROFILE_KEY = "anime-active-profile-id";
 
 function isTheme(value: string | null): value is Theme {
   return value === "light" || value === "dark";
@@ -46,6 +49,55 @@ function subscribeTheme(onStoreChange: () => void) {
     window.removeEventListener(THEME_EVENT, notify);
     window.removeEventListener("storage", notify);
   };
+}
+
+function getActiveProfileSnapshot(): number | null {
+  const stored = Number(localStorage.getItem(ACTIVE_PROFILE_KEY));
+  return Number.isInteger(stored) && stored > 0 ? stored : null;
+}
+
+function getServerActiveProfileSnapshot(): null {
+  return null;
+}
+
+function subscribeActiveProfile(onStoreChange: () => void) {
+  function notify() {
+    onStoreChange();
+  }
+
+  window.addEventListener(ACTIVE_PROFILE_EVENT, notify);
+  window.addEventListener("storage", notify);
+  return () => {
+    window.removeEventListener(ACTIVE_PROFILE_EVENT, notify);
+    window.removeEventListener("storage", notify);
+  };
+}
+
+export function selectActiveProfile(profileId: number | null) {
+  if (profileId == null) {
+    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+  } else {
+    localStorage.setItem(ACTIVE_PROFILE_KEY, String(profileId));
+  }
+  window.dispatchEvent(new Event(ACTIVE_PROFILE_EVENT));
+}
+
+export function useActiveProfile(profiles?: Profile[]) {
+  const selectedId = useSyncExternalStore(
+    subscribeActiveProfile,
+    getActiveProfileSnapshot,
+    getServerActiveProfileSnapshot,
+  );
+  const activeProfile =
+    profiles?.find((profile) => profile.id === selectedId) ?? profiles?.[0];
+
+  useEffect(() => {
+    if (activeProfile && activeProfile.id !== selectedId) {
+      selectActiveProfile(activeProfile.id);
+    }
+  }, [activeProfile, selectedId]);
+
+  return activeProfile;
 }
 
 export function useTheme() {

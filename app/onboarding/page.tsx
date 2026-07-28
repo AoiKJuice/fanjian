@@ -11,7 +11,9 @@ import {
   Sparkle,
   UserCircle,
 } from "@phosphor-icons/react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AnimeCover } from "../components/anime-cover";
 import { RatingControl } from "../components/rating-control";
@@ -31,10 +33,14 @@ import {
   type RatingItem,
 } from "../lib/api";
 import type { Anime } from "../lib/data";
+import { selectActiveProfile } from "../providers";
 
 const steps = ["建立资料", "导入评分", "预览差异", "资料质量"];
 
 export default function OnboardingPage() {
+  const params = useSearchParams();
+  const queryClient = useQueryClient();
+  const creatingNew = params.get("new") === "1";
   const [step, setStep] = useState(0);
   const [source, setSource] =
     useState<"anilist" | "bangumi" | "mal" | "manual">("anilist");
@@ -55,11 +61,13 @@ export default function OnboardingPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (creatingNew) return;
     loadProfiles()
       .then((profiles) => {
         const empty = profiles.find((item) => item.rating_count === 0);
         if (empty) {
           setProfile(empty);
+          selectActiveProfile(empty.id);
           setName(empty.name);
           setTitleLanguage(
             empty.title_language === "native" || empty.title_language === "en"
@@ -69,12 +77,14 @@ export default function OnboardingPage() {
         }
       })
       .catch((reason: Error) => setError(reason.message));
-  }, []);
+  }, [creatingNew]);
 
   async function ensureProfile() {
     if (profile) return profile;
     const created = await createProfile(name.trim() || "我的资料", titleLanguage);
     setProfile(created);
+    selectActiveProfile(created.id);
+    await queryClient.invalidateQueries({ queryKey: ["profiles"] });
     return created;
   }
 
@@ -146,6 +156,7 @@ export default function OnboardingPage() {
           preview.items,
           preview.unmapped_items,
         );
+        await queryClient.invalidateQueries({ queryKey: ["profiles"] });
         setInsights(await loadInsights(profile.id));
         setStep(3);
       }
@@ -297,13 +308,16 @@ export default function OnboardingPage() {
                 </div>
                 <div className="manual-grid">
                   {searchResults.map((item) => (
-                    <article key={item.mal_id}>
+                    <article
+                      key={item.mal_id}
+                      className={rated[item.mal_id] ? "is-rated" : ""}
+                    >
                       <AnimeCover
                         index={item.cover_index}
                         title={item.title_zh || item.title_native}
                         src={item.cover_url}
                       />
-                      <strong>{item.title_zh || item.title_native}</strong>
+                      <h2>{item.title_zh || item.title_native}</h2>
                       <RatingControl
                         value={rated[item.mal_id] ?? null}
                         label={`${item.title_zh || item.title_native}评分`}

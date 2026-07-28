@@ -6,8 +6,9 @@ import {
   ClockCounterClockwise,
   Trash,
 } from "@phosphor-icons/react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PageHeader, StatePanel } from "../../components/ui";
 import {
   deleteRecommendationRun,
@@ -15,28 +16,32 @@ import {
   loadRecommendationHistory,
   type RecommendationHistoryItem,
 } from "../../lib/api";
+import { useActiveProfile } from "../../providers";
 
 export default function HistoryPage() {
-  const [runs, setRuns] = useState<RecommendationHistoryItem[]>([]);
+  const queryClient = useQueryClient();
   const [compare, setCompare] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    loadProfiles()
-      .then(async (profiles) => {
-        if (profiles[0]) {
-          setRuns(await loadRecommendationHistory(profiles[0].id));
-        }
-      })
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const profilesQuery = useQuery({
+    queryKey: ["profiles"],
+    queryFn: loadProfiles,
+  });
+  const profile = useActiveProfile(profilesQuery.data);
+  const historyQuery = useQuery({
+    queryKey: ["recommendation-history", profile?.id],
+    queryFn: () => loadRecommendationHistory(profile!.id),
+    enabled: Boolean(profile),
+  });
+  const runs = historyQuery.data ?? [];
+  const loading = profilesQuery.isPending || historyQuery.isPending;
 
   async function remove(runId: number) {
     try {
       await deleteRecommendationRun(runId);
-      setRuns((items) => items.filter((item) => item.id !== runId));
+      queryClient.setQueryData<RecommendationHistoryItem[]>(
+        ["recommendation-history", profile?.id],
+        (items = []) => items.filter((item) => item.id !== runId),
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "删除失败");
     }
@@ -56,7 +61,11 @@ export default function HistoryPage() {
           </button>
         }
       />
-      {error && <p className="inline-note" role="alert">{error}</p>}
+      {(error || profilesQuery.isError || historyQuery.isError) && (
+        <p className="inline-note" role="alert">
+          {error || "推荐历史读取失败"}
+        </p>
+      )}
       {loading ? (
         <StatePanel title="正在读取推荐历史" />
       ) : !runs.length ? (

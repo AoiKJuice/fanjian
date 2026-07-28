@@ -15,6 +15,7 @@ import {
   saveRatings,
   type WatchStatus,
 } from "../../../lib/api";
+import { useActiveProfile } from "../../../providers";
 
 const statusLabels: Record<WatchStatus, string> = {
   completed: "已看完",
@@ -44,7 +45,7 @@ export default function AnimeDetailPage() {
     queryKey: ["profiles"],
     queryFn: loadProfiles,
   });
-  const profile = profilesQuery.data?.[0];
+  const profile = useActiveProfile(profilesQuery.data);
   const libraryQuery = useQuery({
     queryKey: ["library", profile?.id],
     queryFn: () => loadLibrary(profile!.id),
