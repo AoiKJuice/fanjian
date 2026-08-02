@@ -70,6 +70,9 @@ def test_series_filter_is_optional():
     assert 1112 not in [item["anime"]["mal_id"] for item in blocked]
     allowed = model.recommend(ratings, min_support=3, allow_sequels=True)
     assert 1112 in [item["anime"]["mal_id"] for item in allowed]
+    sequel = next(item for item in allowed if item["anime"]["mal_id"] == 1112)
+    assert sequel["anime"]["is_sequel"] is True
+    assert sequel["anime"]["is_derivative"] is False
 
 
 def test_display_tags_are_curated_deduplicated_and_chinese():

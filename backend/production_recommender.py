@@ -812,6 +812,11 @@ class DiskBackedUserKNN:
             "platform_mean": row["source_score"],
             "bangumi_score": override.get("bangumi_score"),
             "matched_tags": [],
+            "is_sequel": bool(
+                self.catalog_sequels[item_idx]
+                or self.catalog_inferred_continuations[item_idx]
+            ),
+            "is_derivative": bool(self.catalog_ancillary[item_idx]),
         }
 
     def recommend(

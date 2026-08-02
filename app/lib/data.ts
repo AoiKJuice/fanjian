@@ -13,6 +13,8 @@ export type Anime = {
   platform_mean: number | null;
   bangumi_score?: number | null;
   matched_tags?: string[];
+  is_sequel?: boolean;
+  is_derivative?: boolean;
 };
 
 export type Evidence = {

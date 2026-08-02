@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  CaretLeft,
+  CaretRight,
   Faders,
   GridFour,
   List,
@@ -18,7 +20,10 @@ import {
   removeCollectionItem,
   sendRecommendationFeedback,
 } from "../../lib/api";
+import { recommendationPageItems } from "../../lib/pagination";
 import { useActiveProfile } from "../../providers";
+
+const PAGE_SIZE = 20;
 
 export default function RecommendationsPage() {
   const queryClient = useQueryClient();
@@ -26,6 +31,8 @@ export default function RecommendationsPage() {
   const [format, setFormat] = useState("全部");
   const [minimum, setMinimum] = useState(0);
   const [sort, setSort] = useState("推荐分数");
+  const [filterRelated, setFilterRelated] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
     queryFn: loadProfiles,
@@ -43,12 +50,25 @@ export default function RecommendationsPage() {
     const items = recommendations.filter(
       (item) =>
         (format === "全部" || item.anime.format === format) &&
-        item.support >= minimum,
+        item.support >= minimum &&
+        (!filterRelated || (!item.anime.is_sequel && !item.anime.is_derivative)),
     );
     if (sort === "年份") return [...items].sort((a, b) => b.anime.year - a.anime.year);
     if (sort === "支持人数") return [...items].sort((a, b) => b.support - a.support);
     return items;
-  }, [format, minimum, recommendations, sort]);
+  }, [filterRelated, format, minimum, recommendations, sort]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const activePage = Math.min(currentPage, totalPages);
+  const pageItems = filtered.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
+  const activeFilterCount = Number(format !== "全部") + Number(minimum > 0) + Number(filterRelated);
+
+  const changePage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    window.scrollTo({
+      top: 0,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  };
 
   const handleFeedback = useCallback(
     async (action: "favorite" | "hide", malId: number) => {
@@ -101,13 +121,13 @@ export default function RecommendationsPage() {
               { value: "年份", label: "年份" },
               { value: "支持人数", label: "支持人数" },
             ]}
-            onValueChange={setSort}
+            onValueChange={(value) => { setSort(value); setCurrentPage(1); }}
           />
           <Dialog.Root>
             <Dialog.Trigger asChild>
               <button className="button secondary">
                 <Faders size={18} /> 筛选
-                {(format !== "全部" || minimum > 0) && <span className="filter-count">1</span>}
+                {activeFilterCount > 0 && <span className="filter-count">{activeFilterCount}</span>}
               </button>
             </Dialog.Trigger>
             <Dialog.Portal>
@@ -125,7 +145,7 @@ export default function RecommendationsPage() {
                         type="button"
                         key={value}
                         className={format === value ? "active" : ""}
-                        onClick={() => setFormat(value)}
+                        onClick={() => { setFormat(value); setCurrentPage(1); }}
                       >
                         {value}
                       </button>
@@ -141,10 +161,21 @@ export default function RecommendationsPage() {
                       max="20"
                       step="5"
                       value={minimum}
-                      onChange={(event) => setMinimum(Number(event.target.value))}
+                      onChange={(event) => { setMinimum(Number(event.target.value)); setCurrentPage(1); }}
                     />
                     <span>{minimum || "不限"} 人</span>
                   </label>
+                </fieldset>
+                <fieldset>
+                  <legend>系列关系</legend>
+                  <button
+                    type="button"
+                    className={`filter-option-toggle${filterRelated ? " active" : ""}`}
+                    aria-pressed={filterRelated}
+                    onClick={() => { setFilterRelated((value) => !value); setCurrentPage(1); }}
+                  >
+                    过滤续作、衍生作
+                  </button>
                 </fieldset>
               </Dialog.Content>
             </Dialog.Portal>
@@ -166,17 +197,45 @@ export default function RecommendationsPage() {
           title="推荐暂时不可用"
         />
       ) : filtered.length ? (
-        <div className={view === "grid" ? "recommendation-grid" : "recommendation-list"}>
-          {filtered.map((item) => (
-            <RecommendationCard
-              key={`${data?.runId}-${item.anime.mal_id}`}
-              item={item}
-              compact={view === "list"}
-              runId={data?.runId}
-              onFeedback={handleFeedback}
-            />
-          ))}
-        </div>
+        <>
+          <div className={view === "grid" ? "recommendation-grid" : "recommendation-list"}>
+            {pageItems.map((item) => (
+              <RecommendationCard
+                key={`${data?.runId}-${item.anime.mal_id}`}
+                item={item}
+                compact={view === "list"}
+                runId={data?.runId}
+                onFeedback={handleFeedback}
+              />
+            ))}
+          </div>
+          {totalPages > 1 && (
+            <nav className="pagination" aria-label="推荐分页">
+              <button type="button" aria-label="上一页" disabled={activePage === 1} onClick={() => changePage(activePage - 1)}>
+                <CaretLeft size={19} />
+              </button>
+              <div className="pagination-pages">
+                {recommendationPageItems(activePage, totalPages).map((item, index) => item === "ellipsis" ? (
+                  <span key={`ellipsis-${index}`} aria-hidden="true">···</span>
+                ) : (
+                  <button
+                    type="button"
+                    key={item}
+                    className={item === activePage ? "active" : ""}
+                    aria-label={`第 ${item} 页`}
+                    aria-current={item === activePage ? "page" : undefined}
+                    onClick={() => changePage(item)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+              <button type="button" aria-label="下一页" disabled={activePage === totalPages} onClick={() => changePage(activePage + 1)}>
+                <CaretRight size={19} />
+              </button>
+            </nav>
+          )}
+        </>
       ) : (
         <StatePanel
           title="当前筛选没有结果"

@@ -205,6 +205,11 @@ class SurpriseUserKNN:
             anime = self.anime.get(mal_id)
             if not anime or len(votes) < min_support:
                 continue
+            anime = {
+                **anime,
+                "is_sequel": mal_id == 1112,
+                "is_derivative": False,
+            }
             if formats and anime["format"] not in formats:
                 continue
             if not allow_sequels and mal_id == 1112 and 1105 not in ratings:
