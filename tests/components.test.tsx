@@ -10,6 +10,7 @@ import { AnimeCover } from "../app/components/anime-cover";
 import { RecommendationCard } from "../app/components/recommendation-card";
 import { Confidence, StatePanel } from "../app/components/ui";
 import type { Recommendation } from "../app/lib/data";
+import { recommendationPageItems } from "../app/lib/pagination";
 
 const recommendation: Recommendation = {
   anime: {
@@ -50,6 +51,11 @@ afterEach(() => {
 });
 
 describe("shared interface components", () => {
+  it("builds compact, stable recommendation pagination", () => {
+    expect(recommendationPageItems(1, 5)).toEqual([1, 2, 3, 4, 5]);
+    expect(recommendationPageItems(6, 12)).toEqual([1, "ellipsis", 5, 6, 7, "ellipsis", 12]);
+  });
+
   it("exposes cover alt text through an accessible image role", () => {
     render(<AnimeCover index={2} title="雪夜第七码" />);
     expect(screen.getByRole("img", { name: "雪夜第七码封面" })).toBeInTheDocument();

@@ -390,6 +390,8 @@ kbd { padding: 2px 6px; background: var(--surface-muted); border: 1px solid var(
 .drawer-heading h2 { font-size: 1.45rem; }
 .filter-drawer fieldset { margin: 0; padding: 20px 0; border: 0; }
 .filter-drawer legend { margin-bottom: 13px; font-weight: 720; }
+.filter-option-toggle { width: 100%; min-height: 44px; padding: 0 14px; background: var(--surface-muted); border: 1px solid transparent; border-radius: 7px; color: var(--text); font-weight: 700; text-align: left; }
+.filter-option-toggle.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .choice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .choice-grid button { min-height: 42px; background: var(--surface-muted); border: 1px solid transparent; border-radius: 7px; }
 .choice-grid button.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
@@ -397,6 +399,14 @@ kbd { padding: 2px 6px; background: var(--surface-muted); border: 1px solid var(
 .range-control input { accent-color: var(--accent); }
 .check-row { display: flex; align-items: center; gap: 10px; min-height: 42px; }
 .check-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 38px; }
+.pagination-pages { display: flex; align-items: center; justify-content: center; gap: 5px; }
+.pagination button { display: grid; width: 44px; height: 44px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text); font-weight: 780; transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease; }
+.pagination button:hover:not(:disabled) { border-color: var(--line); background: var(--surface); }
+.pagination button:active:not(:disabled) { transform: translateY(1px); }
+.pagination button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.pagination button:disabled { opacity: .32; cursor: default; }
+.pagination-pages > span { display: grid; width: 24px; height: 44px; place-items: center; color: var(--text); font-weight: 780; }
 .confirm-dialog { position: fixed; z-index: 61; left: 50%; top: 50%; width: min(460px, calc(100% - 32px)); padding: 26px; transform: translate(-50%, -50%); background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); }
 .confirm-dialog h2 { font-size: 1.5rem; }
 .confirm-dialog p { color: var(--text-soft); }
@@ -762,6 +772,10 @@ kbd { padding: 2px 6px; background: var(--surface-muted); border: 1px solid var(
   .toolbar-right { margin-left: auto; }
   .theme-select-trigger { min-width: 0; }
   .recommendation-grid { grid-template-columns: minmax(0, 320px); justify-content: center; gap: 16px; }
+  .pagination { gap: 4px; margin-top: 28px; }
+  .pagination-pages { gap: 2px; }
+  .pagination button { width: 40px; height: 40px; }
+  .pagination-pages > span { width: 18px; height: 40px; }
   .skeleton-grid { grid-template-columns: 1fr; }
   .recommendation-list .recommendation-compact { grid-template-columns: 60px 1fr; }
   .recommendation-list .compact-affinity { display: none; }

@@ -322,7 +322,7 @@ export async function loadRecommendations(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       profile_id: profileId,
-      limit: 20,
+      limit: 100,
       min_support: 5,
       allow_sequels: true,
       formats: [],

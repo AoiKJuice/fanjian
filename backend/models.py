@@ -106,6 +106,8 @@ class AnimeSummary(BaseModel):
     platform_mean: float | None = None
     bangumi_score: float | None = None
     matched_tags: list[str] = Field(default_factory=list)
+    is_sequel: bool = False
+    is_derivative: bool = False
 
 
 class RecommendationItem(BaseModel):
