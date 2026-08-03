@@ -1,0 +1,19 @@
+{
+  "name": "番鉴",
+  "short_name": "番鉴",
+  "description": "从评分结构中生成可解释的番剧推荐。",
+  "start_url": "./dashboard",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8f7f4",
+  "theme_color": "#f8f7f4",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

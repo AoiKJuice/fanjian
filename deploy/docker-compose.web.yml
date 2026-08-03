@@ -5,6 +5,8 @@ services:
       dockerfile: deploy/Dockerfile.web
       args:
         NEXT_PUBLIC_BASE_PATH: /tools/anime-affinity/app
+        NEXT_PUBLIC_BROWSER_MODEL: "1"
+        NEXT_PUBLIC_MODEL_BASE_URL: /tools/anime-affinity/model
     container_name: fanjian-web
     ports:
       - "127.0.0.1:3010:3000"
