@@ -33,6 +33,10 @@ import {
   type RatingItem,
 } from "../lib/api";
 import type { Anime } from "../lib/data";
+import {
+  parseProfileBackup,
+  type ProfileBackupImport,
+} from "../lib/profile-backup";
 import { selectActiveProfile } from "../providers";
 
 const steps = ["建立资料", "导入评分", "预览差异", "资料质量"];
@@ -43,7 +47,7 @@ export default function OnboardingPage() {
   const creatingNew = params.get("new") === "1";
   const [step, setStep] = useState(0);
   const [source, setSource] =
-    useState<"anilist" | "bangumi" | "mal" | "manual">("anilist");
+    useState<"anilist" | "bangumi" | "mal" | "fanjian" | "manual">("anilist");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [name, setName] = useState("我的资料");
   const [titleLanguage, setTitleLanguage] =
@@ -52,6 +56,8 @@ export default function OnboardingPage() {
   const [bangumiUsername, setBangumiUsername] = useState("");
   const [bangumiToken, setBangumiToken] = useState("");
   const [malFile, setMalFile] = useState<File | null>(null);
+  const [backup, setBackup] = useState<ProfileBackupImport | null>(null);
+  const [backupFileName, setBackupFileName] = useState("");
   const [searchText, setSearchText] = useState("");
   const [searchResults, setSearchResults] = useState<Anime[]>([]);
   const [rated, setRated] = useState<Record<number, number>>({});
@@ -86,6 +92,20 @@ export default function OnboardingPage() {
     selectActiveProfile(created.id);
     await queryClient.invalidateQueries({ queryKey: ["profiles"] });
     return created;
+  }
+
+  async function readBackup(file: File | null) {
+    if (!file) return;
+    setError("");
+    try {
+      const parsed = parseProfileBackup(await file.text());
+      setBackup(parsed);
+      setBackupFileName(file.name);
+    } catch (reason) {
+      setBackup(null);
+      setBackupFileName("");
+      setError(reason instanceof Error ? reason.message : "导入失败");
+    }
   }
 
   async function search() {
@@ -128,6 +148,9 @@ export default function OnboardingPage() {
         } else if (source === "mal") {
           if (!malFile) throw new Error("请选择 MAL XML 文件");
           setPreview(await importMal(current.id, malFile));
+        } else if (source === "fanjian") {
+          if (!backup) throw new Error("请选择番鉴导出的 JSON 文件");
+          setPreview(backup.preview);
         } else {
           const items: RatingItem[] = Object.entries(rated).map(
             ([malId, rating]) => ({
@@ -224,6 +247,7 @@ export default function OnboardingPage() {
                 ["anilist", "AniList 用户名"],
                 ["bangumi", "Bangumi 用户名"],
                 ["mal", "MAL 文件"],
+                ["fanjian", "番鉴文件"],
                 ["manual", "手动评分"],
               ].map(([value, label]) => (
                 <button
@@ -258,6 +282,18 @@ export default function OnboardingPage() {
                   onChange={(event) => setMalFile(event.target.files?.[0] ?? null)}
                 />
               </div>
+            )}
+            {source === "fanjian" && (
+              <label className="source-panel upload-box profile-json-upload">
+                <FileArrowUp size={28} />
+                <strong>{backupFileName || "选择番鉴导出的 JSON 文件"}</strong>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  aria-label="选择番鉴 JSON 文件"
+                  onChange={(event) => void readBackup(event.target.files?.[0] ?? null)}
+                />
+              </label>
             )}
             {source === "bangumi" && (
               <div className="source-panel">

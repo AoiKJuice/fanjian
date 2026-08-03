@@ -208,7 +208,15 @@ export async function loadInsights(profileId: number): Promise<Insights> {
       const key = String(Math.round(value));
       histogram[key] = (histogram[key] ?? 0) + 1;
     });
-    const stats = await browserNeighborStats(ratings, await localNegativeItems(profileId));
+    const modelStatus = await browserModelStatus();
+    const stats = modelStatus.state === "ready"
+      ? await browserNeighborStats(ratings, await localNegativeItems(profileId))
+      : {
+          neighborCount: 0,
+          meanOverlap: 0,
+          mainstreamIndex: 0,
+          longTailRatio: 0,
+        };
     return {
       rating_count: values.length,
       mean_rating: Number(mean.toFixed(2)),
@@ -230,7 +238,7 @@ export async function loadInsights(profileId: number): Promise<Insights> {
 export async function loadModelCard(): Promise<ModelCard> {
   if (browserModelEnabled) {
     const status = await browserModelStatus();
-    if (status.state !== "ready" || !status.manifest) throw new Error("模型尚未下载");
+    if (!status.manifest) throw new Error("模型清单读取失败");
     return {
       model_version: status.manifest.model_version,
       data_version: status.manifest.data_version,
