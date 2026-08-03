@@ -36,7 +36,8 @@ npm run start
 
 ## 手机浏览器部署
 
-服务器模式由 Nginx 提供网页和原始模型文件，模型下载到浏览器 OPFS，资料、
+服务器模式由 Nginx 提供网页，模型文件由 GitHub Release 经 Cloudflare Worker
+传输。模型下载到浏览器 OPFS，资料、
 评分、收藏与推荐历史保存在 IndexedDB，推荐计算由 Web Worker 在设备内执行。
 服务器不运行推荐 API。构建参数见 `deploy/docker-compose.web.yml`，模型目录清单
 由以下命令生成：
@@ -44,10 +45,12 @@ npm run start
 ```bash
 python scripts/prepare_browser_model.py \
   /opt/fanjian-model/anime-model-open-2026-27 \
-  --base-url /tools/anime-affinity/model
+  --base-url https://fanjian-model.pjjzxcvbnm.workers.dev \
+  --catalog-url-path catalog.json
 ```
 
-Nginx 模型下载配置见 `deploy/nginx.browser-model.conf`。
+Worker 源码见 `deploy/cloudflare-model-worker.js`。Nginx 只提供
+`browser-model-manifest.json`，配置见 `deploy/nginx.browser-model.conf`。
 
 ## 目录与模型构建
 
