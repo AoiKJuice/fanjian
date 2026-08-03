@@ -25,6 +25,7 @@ import {
   importMal,
   loadInsights,
   loadProfiles,
+  restoreProfileCollections,
   saveRatings,
   searchAnime,
   type ImportPreview,
@@ -179,6 +180,12 @@ export default function OnboardingPage() {
           preview.items,
           preview.unmapped_items,
         );
+        if (source === "fanjian" && backup) {
+          await restoreProfileCollections(profile.id, backup.collections);
+          await queryClient.invalidateQueries({
+            queryKey: ["profile-collections", profile.id],
+          });
+        }
         await queryClient.invalidateQueries({ queryKey: ["profiles"] });
         setInsights(await loadInsights(profile.id));
         setStep(3);

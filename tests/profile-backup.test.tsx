@@ -28,6 +28,10 @@ describe("profile backup", () => {
           updated_at: "2026-08-03T00:00:00.000Z",
         },
       ],
+      {
+        favorites: [5114, 9253],
+        hidden: [1535],
+      },
     );
 
     const parsed = parseProfileBackup(payload);
@@ -39,6 +43,10 @@ describe("profile backup", () => {
       { mal_id: 1, rating: 9, status: "completed" },
       { mal_id: 2, rating: null, status: "plan_to_watch" },
     ]);
+    expect(parsed.collections).toEqual({
+      favorites: [5114, 9253],
+      hidden: [1535],
+    });
   });
 
   it("accepts earlier exports without schema_version", () => {
@@ -50,6 +58,7 @@ describe("profile backup", () => {
 
     expect(parsed.name).toBe("原导出");
     expect(parsed.preview.items).toHaveLength(1);
+    expect(parsed.collections).toEqual({ favorites: [], hidden: [] });
   });
 
   it("rejects unrelated JSON files", () => {

@@ -276,6 +276,22 @@ export async function setLocalCollection(
   await completed(tx);
 }
 
+export async function saveLocalCollections(
+  profileId: number,
+  collections: Record<"favorites" | "hidden", number[]>,
+) {
+  const tx = await transaction("collections", "readwrite");
+  const store = tx.objectStore("collections");
+  for (const kind of ["favorites", "hidden"] as const) {
+    const other = kind === "favorites" ? "hidden" : "favorites";
+    for (const malId of collections[kind]) {
+      store.delete([profileId, other, malId]);
+      store.put({ profile_id: profileId, kind, mal_id: malId, created_at: now() });
+    }
+  }
+  await completed(tx);
+}
+
 export async function removeLocalCollection(
   profileId: number,
   kind: "favorites" | "hidden",

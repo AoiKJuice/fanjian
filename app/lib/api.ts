@@ -23,6 +23,7 @@ import {
   localRunHistory,
   removeLocalCollection,
   saveLocalRatings,
+  saveLocalCollections,
   saveLocalRun,
   setLocalCollection,
 } from "./local-db";
@@ -136,6 +137,11 @@ export type CollectionItem = {
 export type ProfileCollections = {
   favorites: CollectionItem[];
   hidden: CollectionItem[];
+};
+
+export type ProfileCollectionIds = {
+  favorites: number[];
+  hidden: number[];
 };
 
 export type RecommendationHistoryItem = {
@@ -337,6 +343,43 @@ export async function loadCollections(
   return requestJson<ProfileCollections>(
     `/profiles/${profileId}/collections`,
   );
+}
+
+export async function loadProfileExportData(profileId: number) {
+  if (browserModelEnabled) {
+    const [ratings, collections] = await Promise.all([
+      loadLocalLibrary(profileId),
+      localCollections(profileId),
+    ]);
+    return {
+      ratings,
+      collections: {
+        favorites: collections.favorites.map((item) => item.mal_id),
+        hidden: collections.hidden.map((item) => item.mal_id),
+      },
+    };
+  }
+  const [ratings, collections] = await Promise.all([
+    loadLibrary(profileId),
+    loadCollections(profileId),
+  ]);
+  return {
+    ratings,
+    collections: {
+      favorites: collections.favorites.map((item) => item.mal_id),
+      hidden: collections.hidden.map((item) => item.mal_id),
+    },
+  };
+}
+
+export async function restoreProfileCollections(
+  profileId: number,
+  collections: ProfileCollectionIds,
+) {
+  if (browserModelEnabled) {
+    return saveLocalCollections(profileId, collections);
+  }
+  throw new Error("当前版本无法导入想看和不感兴趣记录");
 }
 
 export async function removeCollectionItem(
