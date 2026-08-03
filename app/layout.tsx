@@ -7,6 +7,12 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 export const metadata: Metadata = {
   title: "番鉴 | 评分亲和度研究室",
   description: "从评分结构中寻找真正相近的观众，生成可解释的番剧推荐。",
+  manifest: `${basePath}/manifest.webmanifest`,
+  appleWebApp: {
+    capable: true,
+    title: "番鉴",
+    statusBarStyle: "default",
+  },
   icons: {
     icon: `${basePath}/favicon.svg`,
     shortcut: `${basePath}/favicon.svg`,

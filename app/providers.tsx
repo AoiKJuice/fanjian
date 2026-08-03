@@ -11,6 +11,9 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { Profile } from "./lib/api";
+import { browserModelEnabled } from "./lib/browser-mode";
+
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 type Theme = "light" | "dark";
 
@@ -124,6 +127,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    if (!browserModelEnabled || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register(`${basePath}/sw.js`).catch(() => undefined);
+  }, []);
 
   const setTheme = useCallback((next: Theme) => {
     document.documentElement.dataset.theme = next;

@@ -34,6 +34,21 @@ npm run start
 浏览器访问 `http://localhost:3000`。API 文档位于
 `http://localhost:8000/docs`。
 
+## 手机浏览器部署
+
+服务器模式由 Nginx 提供网页和原始模型文件，模型下载到浏览器 OPFS，资料、
+评分、收藏与推荐历史保存在 IndexedDB，推荐计算由 Web Worker 在设备内执行。
+服务器不运行推荐 API。构建参数见 `deploy/docker-compose.web.yml`，模型目录清单
+由以下命令生成：
+
+```bash
+python scripts/prepare_browser_model.py \
+  /opt/fanjian-model/anime-model-open-2026-27 \
+  --base-url /tools/anime-affinity/model
+```
+
+Nginx 模型下载配置见 `deploy/nginx.browser-model.conf`。
+
 ## 目录与模型构建
 
 生产 API 默认读取

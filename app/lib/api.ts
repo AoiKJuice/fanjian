@@ -1,4 +1,39 @@
 import type { Anime, Recommendation } from "./data";
+import { browserModelEnabled } from "./browser-mode";
+import {
+  importAniListInBrowser,
+  importBangumiInBrowser,
+  importMalInBrowser,
+} from "./browser-imports";
+import {
+  associateLocalExternalRating,
+  createLocalProfile,
+  deleteLocalProfile,
+  deleteLocalRun,
+  enrichCollections,
+  enrichLibrary,
+  listLocalProfiles,
+  loadLocalExternalLibrary,
+  loadLocalLibrary,
+  loadLocalRun,
+  localCollections,
+  localExcluded,
+  localNegativeItems,
+  localRatingsMap,
+  localRunHistory,
+  removeLocalCollection,
+  saveLocalRatings,
+  saveLocalRun,
+  setLocalCollection,
+} from "./local-db";
+import {
+  browserModelStatus,
+  browserNeighborStats,
+  loadBrowserAnime,
+  loadBrowserAnimeMany,
+  recommendInBrowser,
+  searchBrowserCatalog,
+} from "./model-client";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -136,18 +171,75 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function loadProfiles(): Promise<Profile[]> {
+  if (browserModelEnabled) return listLocalProfiles();
   return requestJson<Profile[]>("/profiles");
 }
 
 export async function loadLocalHealth(): Promise<LocalHealth> {
+  if (browserModelEnabled) {
+    const status = await browserModelStatus();
+    if (status.state !== "ready" || !status.manifest) throw new Error("模型尚未下载");
+    return {
+      status: "ok",
+      model_version: status.manifest.model_version,
+      data_version: status.manifest.data_version,
+      catalog_items: status.manifest.catalog_items,
+      training_users: status.manifest.training_users,
+      training_ratings: status.manifest.training_ratings,
+    };
+  }
   return requestJson<LocalHealth>("/health");
 }
 
 export async function loadInsights(profileId: number): Promise<Insights> {
+  if (browserModelEnabled) {
+    const ratings = await localRatingsMap(profileId);
+    const values = Object.values(ratings);
+    const mean = values.length
+      ? values.reduce((sum, value) => sum + value, 0) / values.length
+      : 0;
+    const deviation = values.length > 1
+      ? Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length)
+      : 0;
+    const histogram = Object.fromEntries(
+      Array.from({ length: 10 }, (_, index) => [String(index + 1), 0]),
+    );
+    values.forEach((value) => {
+      const key = String(Math.round(value));
+      histogram[key] = (histogram[key] ?? 0) + 1;
+    });
+    const stats = await browserNeighborStats(ratings, await localNegativeItems(profileId));
+    return {
+      rating_count: values.length,
+      mean_rating: Number(mean.toFixed(2)),
+      rating_stddev: Number(deviation.toFixed(2)),
+      distinct_integer_scores: new Set(values.map(Math.round)).size,
+      quality: values.length >= 30 && deviation >= 0.75
+        ? "高"
+        : values.length >= 5 && deviation >= 0.5 ? "中" : "低",
+      neighbor_count: stats.neighborCount,
+      mean_overlap: stats.meanOverlap,
+      histogram,
+      mainstream_index: stats.mainstreamIndex,
+      long_tail_ratio: stats.longTailRatio,
+    };
+  }
   return requestJson<Insights>(`/profiles/${profileId}/insights`);
 }
 
 export async function loadModelCard(): Promise<ModelCard> {
+  if (browserModelEnabled) {
+    const status = await browserModelStatus();
+    if (status.state !== "ready" || !status.manifest) throw new Error("模型尚未下载");
+    return {
+      model_version: status.manifest.model_version,
+      data_version: status.manifest.data_version,
+      algorithm: "surprise weighted userknn",
+      catalog_items: status.manifest.catalog_items,
+      training_users: status.manifest.training_users,
+      training_ratings: status.manifest.training_ratings,
+    };
+  }
   return requestJson<ModelCard>("/system/model-card");
 }
 
@@ -155,6 +247,7 @@ export async function createProfile(
   name: string,
   titleLanguage: "zh" | "native" | "en",
 ): Promise<Profile> {
+  if (browserModelEnabled) return createLocalProfile(name, titleLanguage);
   return requestJson<Profile>("/profiles", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -166,6 +259,7 @@ export async function createProfile(
 }
 
 export async function deleteProfile(profileId: number): Promise<void> {
+  if (browserModelEnabled) return deleteLocalProfile(profileId);
   const response = await fetch(`${API_BASE}/profiles/${profileId}`, {
     method: "DELETE",
   });
@@ -173,6 +267,18 @@ export async function deleteProfile(profileId: number): Promise<void> {
 }
 
 export async function loadLibrary(profileId: number): Promise<LibraryItem[]> {
+  if (browserModelEnabled) {
+    const [rows, collections] = await Promise.all([
+      loadLocalLibrary(profileId),
+      localCollections(profileId),
+    ]);
+    const anime = await loadBrowserAnimeMany(rows.map((item) => item.mal_id));
+    return enrichLibrary(
+      rows,
+      new Map(anime.map((item) => [item.mal_id, item])),
+      collections,
+    );
+  }
   const payload = await requestJson<{ items: LibraryItem[] }>(
     `/profiles/${profileId}/library`,
   );
@@ -182,6 +288,7 @@ export async function loadLibrary(profileId: number): Promise<LibraryItem[]> {
 export async function loadUnmappedLibrary(
   profileId: number,
 ): Promise<ExternalLibraryItem[]> {
+  if (browserModelEnabled) return loadLocalExternalLibrary(profileId);
   const payload = await requestJson<{
     unmapped_items: ExternalLibraryItem[];
   }>(`/profiles/${profileId}/library`);
@@ -193,6 +300,9 @@ export async function associateExternalRating(
   item: Pick<ExternalLibraryItem, "source" | "external_id">,
   malId: number,
 ): Promise<void> {
+  if (browserModelEnabled) {
+    return associateLocalExternalRating(profileId, item, malId);
+  }
   await requestJson(`/profiles/${profileId}/library/associate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -207,6 +317,15 @@ export async function associateExternalRating(
 export async function loadCollections(
   profileId: number,
 ): Promise<ProfileCollections> {
+  if (browserModelEnabled) {
+    const collections = await localCollections(profileId);
+    const ids = [...collections.favorites, ...collections.hidden].map((item) => item.mal_id);
+    const anime = await loadBrowserAnimeMany(ids);
+    return enrichCollections(
+      collections,
+      new Map(anime.map((item) => [item.mal_id, item])),
+    );
+  }
   return requestJson<ProfileCollections>(
     `/profiles/${profileId}/collections`,
   );
@@ -217,6 +336,7 @@ export async function removeCollectionItem(
   collection: keyof ProfileCollections,
   malId: number,
 ): Promise<void> {
+  if (browserModelEnabled) return removeLocalCollection(profileId, collection, malId);
   const response = await fetch(
     `${API_BASE}/profiles/${profileId}/collections/${collection}/${malId}`,
     { method: "DELETE" },
@@ -229,6 +349,7 @@ export async function saveRatings(
   items: RatingItem[],
   externalItems: ExternalRatingItem[] = [],
 ): Promise<void> {
+  if (browserModelEnabled) return saveLocalRatings(profileId, items, externalItems);
   await requestJson(`/profiles/${profileId}/ratings`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -240,6 +361,7 @@ export async function importAniList(
   profileId: number,
   username: string,
 ): Promise<ImportPreview> {
+  if (browserModelEnabled) return importAniListInBrowser(username);
   return requestJson<ImportPreview>("/profiles/import/anilist", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -252,6 +374,7 @@ export async function importBangumi(
   username: string,
   accessToken?: string,
 ): Promise<ImportPreview> {
+  if (browserModelEnabled) return importBangumiInBrowser(username, accessToken);
   return requestJson<ImportPreview>("/profiles/import/bangumi", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -267,6 +390,7 @@ export async function importMal(
   profileId: number,
   file: File,
 ): Promise<ImportPreview> {
+  if (browserModelEnabled) return importMalInBrowser(file);
   const body = new FormData();
   body.set("profile_id", String(profileId));
   body.set("file", file);
@@ -280,24 +404,32 @@ export async function searchAnime(
   query: string,
   limit = 20,
 ): Promise<{ items: Anime[]; total: number }> {
+  if (browserModelEnabled) return searchBrowserCatalog(query, limit);
   return requestJson<{ items: Anime[]; total: number }>(
     `/anime/search?q=${encodeURIComponent(query)}&limit=${limit}`,
   );
 }
 
 export async function loadAnime(malId: number): Promise<Anime> {
+  if (browserModelEnabled) return loadBrowserAnime(malId);
   return requestJson<Anime>(`/anime/${malId}`);
 }
 
 export async function loadRecommendationRun(
   runId: number,
 ): Promise<RecommendationRun> {
+  if (browserModelEnabled) {
+    const run = await loadLocalRun(runId);
+    if (!run) throw new Error("推荐记录不存在");
+    return run;
+  }
   return requestJson<RecommendationRun>(`/recommendations/${runId}`);
 }
 
 export async function loadRecommendationHistory(
   profileId: number,
 ): Promise<RecommendationHistoryItem[]> {
+  if (browserModelEnabled) return localRunHistory(profileId);
   const payload = await requestJson<{ items: RecommendationHistoryItem[] }>(
     `/recommendations/history?profile_id=${profileId}`,
   );
@@ -305,6 +437,7 @@ export async function loadRecommendationHistory(
 }
 
 export async function deleteRecommendationRun(runId: number): Promise<void> {
+  if (browserModelEnabled) return deleteLocalRun(runId);
   const response = await fetch(`${API_BASE}/recommendations/${runId}`, {
     method: "DELETE",
   });
@@ -314,6 +447,33 @@ export async function deleteRecommendationRun(runId: number): Promise<void> {
 export async function loadRecommendations(
   profileId = 1,
 ): Promise<RecommendationPayload> {
+  if (browserModelEnabled) {
+    const [ratings, excluded, negativeItems, status] = await Promise.all([
+      localRatingsMap(profileId),
+      localExcluded(profileId),
+      localNegativeItems(profileId),
+      browserModelStatus(),
+    ]);
+    if (!status.manifest) throw new Error("模型尚未下载");
+    const result = await recommendInBrowser({
+      ratings,
+      excluded,
+      negativeItems,
+      limit: 100,
+      minSupport: 5,
+      allowSequels: true,
+      formats: [],
+    });
+    const run = await saveLocalRun(
+      profileId,
+      status.manifest.model_version,
+      status.manifest.data_version,
+      Object.keys(ratings).length >= 10 ? "ready" : "insufficient",
+      result.items,
+      { limit: 100, min_support: 5, allow_sequels: true, formats: [] },
+    );
+    return { items: run.items, runId: run.id, source: "api" };
+  }
   const payload = await requestJson<{
     id: number;
     items: Recommendation[];
@@ -336,6 +496,15 @@ export async function sendRecommendationFeedback(
   malId: number,
   action: "favorite" | "hide",
 ) {
+  if (browserModelEnabled) {
+    const run = await loadLocalRun(runId);
+    if (!run) throw new Error("推荐记录不存在");
+    return setLocalCollection(
+      run.profile_id,
+      action === "favorite" ? "favorites" : "hidden",
+      malId,
+    );
+  }
   const response = await fetch(
     `${API_BASE}/recommendations/${runId}/feedback`,
     {
