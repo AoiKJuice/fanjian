@@ -33,8 +33,8 @@ import {
 } from "../../providers";
 import {
   deleteProfile,
-  loadLibrary,
   loadModelCard,
+  loadProfileExportData,
   loadProfiles,
   type ModelCard,
   type Profile,
@@ -71,8 +71,8 @@ export default function SettingsPage() {
 
   async function exportProfile(profile: Profile) {
     try {
-      const items = await loadLibrary(profile.id);
-      const payload = serializeProfileBackup(profile, items);
+      const data = await loadProfileExportData(profile.id);
+      const payload = serializeProfileBackup(profile, data.ratings, data.collections);
       const url = URL.createObjectURL(
         new Blob([payload], { type: "application/json" }),
       );

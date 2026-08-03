@@ -16,10 +16,16 @@ const WATCH_STATUSES = new Set<WatchStatus>([
 
 type TitleLanguage = "zh" | "native" | "en";
 
+export type ProfileBackupCollections = {
+  favorites: number[];
+  hidden: number[];
+};
+
 export type ProfileBackupImport = {
   name: string;
   titleLanguage: TitleLanguage;
   preview: ImportPreview;
+  collections: ProfileBackupCollections;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -29,6 +35,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function serializeProfileBackup(
   profile: Profile,
   items: Array<Pick<LibraryItem, "mal_id" | "rating" | "status" | "updated_at">>,
+  collections: ProfileBackupCollections = { favorites: [], hidden: [] },
 ) {
   return JSON.stringify(
     {
@@ -41,6 +48,7 @@ export function serializeProfileBackup(
         status,
         updated_at,
       })),
+      collections,
     },
     null,
     2,
@@ -103,6 +111,17 @@ export function parseProfileBackup(text: string): ProfileBackupImport {
   }
 
   const items = [...ratings.values()];
+  const rawCollections = isRecord(value.collections) ? value.collections : {};
+  const collectionIds = (input: unknown) => Array.isArray(input)
+    ? [...new Set(input.flatMap((item) => {
+        const malId = typeof item === "number"
+          ? item
+          : isRecord(item) ? item.mal_id : null;
+        return typeof malId === "number" && Number.isInteger(malId) && malId > 0
+          ? [malId]
+          : [];
+      }))]
+    : [];
   return {
     name,
     titleLanguage,
@@ -114,6 +133,10 @@ export function parseProfileBackup(text: string): ProfileBackupImport {
       items,
       unmapped_items: [],
       warnings: invalid ? [`已忽略 ${invalid} 条无效记录`] : [],
+    },
+    collections: {
+      favorites: collectionIds(rawCollections.favorites),
+      hidden: collectionIds(rawCollections.hidden),
     },
   };
 }
