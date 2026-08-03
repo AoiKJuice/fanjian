@@ -89,6 +89,7 @@ def prepare(
     model_directory: Path,
     release_manifest_path: Path,
     base_url: str,
+    catalog_url_path: str = "browser/catalog.json",
 ) -> dict[str, Any]:
     release = json.loads(release_manifest_path.read_text(encoding="utf-8"))
     release_files = {record["path"]: record for record in release["expected_files"]}
@@ -119,7 +120,7 @@ def prepare(
         "path": "browser/catalog.json",
         "bytes": catalog_path.stat().st_size,
         "sha256": sha256(catalog_path),
-        "url": f"{base_url.rstrip('/')}/browser/catalog.json",
+        "url": f"{base_url.rstrip('/')}/{catalog_url_path.lstrip('/')}",
     }
     model_manifest = json.loads(
         (model_directory / "manifest.json").read_text(encoding="utf-8")
@@ -154,12 +155,21 @@ def parser() -> argparse.ArgumentParser:
         "--base-url",
         default="/tools/anime-affinity/model",
     )
+    result.add_argument(
+        "--catalog-url-path",
+        default="browser/catalog.json",
+    )
     return result
 
 
 def main() -> None:
     args = parser().parse_args()
-    result = prepare(args.model_directory, args.release_manifest, args.base_url)
+    result = prepare(
+        args.model_directory,
+        args.release_manifest,
+        args.base_url,
+        args.catalog_url_path,
+    )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
