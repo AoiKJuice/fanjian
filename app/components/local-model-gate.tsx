@@ -6,14 +6,16 @@ import {
   HardDrives,
 } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { loadLocalHealth } from "../lib/api";
 import { browserModelEnabled } from "../lib/browser-mode";
 import {
   browserModelStatus,
+  browserModelServerSnapshot,
+  browserModelStatusSnapshot,
   downloadBrowserModel,
+  subscribeBrowserModelStatus,
 } from "../lib/model-client";
-import type { ModelDownloadProgress } from "../lib/model-types";
 
 const WINDOWS_PACKAGE =
   "https://github.com/AoiKJuice/fanjian/releases/download/" +
@@ -27,8 +29,12 @@ export function LocalModelGate() {
 function BrowserModelGate() {
   const queryClient = useQueryClient();
   const [dismissed, setDismissed] = useState(false);
-  const [progress, setProgress] = useState<ModelDownloadProgress | null>(null);
-  const [downloadError, setDownloadError] = useState(false);
+  const [started, setStarted] = useState(false);
+  const liveStatus = useSyncExternalStore(
+    subscribeBrowserModelStatus,
+    browserModelStatusSnapshot,
+    browserModelServerSnapshot,
+  );
   const status = useQuery({
     queryKey: ["browser-model-status"],
     queryFn: browserModelStatus,
@@ -36,32 +42,30 @@ function BrowserModelGate() {
     refetchOnWindowFocus: false,
   });
 
-  const ready = status.data?.state === "ready";
+  const currentStatus = liveStatus ?? status.data;
+  const ready = currentStatus?.state === "ready";
+  const downloading = currentStatus?.state === "downloading";
+  const failed = currentStatus?.state === "error";
+  const percent = currentStatus?.totalBytes
+    ? Math.min(100, Math.floor(
+        (currentStatus.downloadedBytes / currentStatus.totalBytes) * 100,
+      ))
+    : 0;
   if (status.isPending || ready || dismissed) return null;
 
-  async function download() {
-    setDownloadError(false);
-    setProgress({
-      state: "downloading",
-      downloadedBytes: status.data?.downloadedBytes ?? 0,
-      totalBytes: status.data?.totalBytes ?? 3263204947,
-    });
-    try {
-      await downloadBrowserModel(setProgress);
-      await status.refetch();
-      await queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] !== "browser-model-status",
+  function download() {
+    setStarted(true);
+    void downloadBrowserModel()
+      .then(async () => {
+        await status.refetch();
+        await queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] !== "browser-model-status",
+        });
+      })
+      .catch(async () => {
+        await status.refetch();
       });
-    } catch (reason) {
-      console.error("模型下载失败", reason);
-      setProgress(null);
-      setDownloadError(true);
-    }
   }
-
-  const percent = progress?.totalBytes
-    ? Math.min(100, Math.floor((progress.downloadedBytes / progress.totalBytes) * 100))
-    : 0;
 
   return (
     <div className="model-gate-backdrop">
@@ -71,19 +75,40 @@ function BrowserModelGate() {
         aria-modal="true"
         aria-labelledby="model-gate-title"
       >
-        {progress ? (
+        {failed ? (
+          <>
+            <h1 id="model-gate-title">模型下载失败</h1>
+            <div className="model-gate-actions">
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setDismissed(true)}
+              >
+                取消
+              </button>
+              <button className="button primary" type="button" onClick={download}>
+                重新下载
+              </button>
+            </div>
+          </>
+        ) : started || downloading ? (
           <>
             <h1 id="model-gate-title">正在下载模型 {percent}%</h1>
             <progress value={percent} max={100} aria-label={`模型下载进度 ${percent}%`} />
+            <div className="model-gate-actions">
+              <button
+                className="button primary"
+                type="button"
+                onClick={() => setDismissed(true)}
+              >
+                后台下载
+              </button>
+            </div>
           </>
         ) : (
           <>
             <h1 id="model-gate-title">
-              {downloadError
-                ? "模型下载失败"
-                : <>
-                    即将下载约 3.03 GiB <span className="model-file-label">模型文件</span>
-                  </>}
+              即将下载约 3.03 GiB <span className="model-file-label">模型文件</span>
             </h1>
             <div className="model-gate-actions">
               <button
@@ -94,7 +119,7 @@ function BrowserModelGate() {
                 取消
               </button>
               <button className="button primary" type="button" onClick={download}>
-                {downloadError ? "重新下载" : "确认下载"}
+                确认下载
               </button>
             </div>
           </>

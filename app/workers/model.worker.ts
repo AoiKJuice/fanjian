@@ -16,6 +16,7 @@ import type {
 
 const MODEL_DIRECTORY = "fanjian-model-v1";
 const INSTALLED_FILE = "installed.json";
+const CATALOG_FILE = ".catalog-installed.json";
 
 const GENRE_LABELS: Record<string, string> = {
   action: "动作",
@@ -275,6 +276,17 @@ async function installedManifest() {
   }
 }
 
+async function catalogManifest() {
+  try {
+    return await readJson<BrowserModelManifest>(
+      await modelDirectory(false),
+      CATALOG_FILE,
+    );
+  } catch {
+    return null;
+  }
+}
+
 async function currentStatus(manifestUrl: string): Promise<ModelStatus> {
   const installed = await installedManifest();
   let manifest: BrowserModelManifest;
@@ -284,7 +296,10 @@ async function currentStatus(manifestUrl: string): Promise<ModelStatus> {
     if (!installed) throw reason;
     manifest = installed;
   }
-  if (installed?.model_version !== manifest.model_version) {
+  let directory: FileSystemDirectoryHandle;
+  try {
+    directory = await modelDirectory(false);
+  } catch {
     return {
       state: "missing",
       downloadedBytes: 0,
@@ -292,24 +307,19 @@ async function currentStatus(manifestUrl: string): Promise<ModelStatus> {
       manifest,
     };
   }
-  const directory = await modelDirectory(false);
   let downloadedBytes = 0;
-  for (const record of [...manifest.files, manifest.browser_catalog]) {
+  let complete = installed?.model_version === manifest.model_version;
+  for (const record of [manifest.browser_catalog, ...manifest.files]) {
     try {
       const file = await (await fileHandleForPath(directory, record.path, false)).getFile();
-      if (file.size !== record.bytes) throw new Error("size");
-      downloadedBytes += record.bytes;
+      downloadedBytes += Math.min(file.size, record.bytes);
+      if (file.size !== record.bytes) complete = false;
     } catch {
-      return {
-        state: "missing",
-        downloadedBytes,
-        totalBytes: manifest.total_bytes,
-        manifest,
-      };
+      complete = false;
     }
   }
   return {
-    state: "ready",
+    state: complete ? "ready" : "missing",
     downloadedBytes,
     totalBytes: manifest.total_bytes,
     manifest,
@@ -387,7 +397,7 @@ async function downloadModel(
   const manifest = await fetchManifest(manifestUrl);
   await navigator.storage.persist?.();
   const directory = await modelDirectory(true);
-  const records = [...manifest.files, manifest.browser_catalog];
+  const records = [manifest.browser_catalog, ...manifest.files];
   let completed = 0;
   for (const record of records) {
     const existing = await fileHandleForPath(directory, record.path, true).then(
@@ -398,10 +408,14 @@ async function downloadModel(
       (await sha256File(existing)) === record.sha256.toLowerCase()
     ) {
       completed += record.bytes;
-      continue;
+    } else {
+      await downloadFile(directory, record, completed, manifest.total_bytes, report);
+      completed += record.bytes;
     }
-    await downloadFile(directory, record, completed, manifest.total_bytes, report);
-    completed += record.bytes;
+    if (record.path === manifest.browser_catalog.path) {
+      await writeJson(directory, CATALOG_FILE, manifest);
+      catalogRuntime = null;
+    }
   }
   await writeJson(directory, INSTALLED_FILE, manifest);
   runtime = null;
@@ -989,6 +1003,55 @@ class BrowserRecommender {
 }
 
 let runtime: BrowserRecommender | null = null;
+let catalogRuntime: BrowserCatalog | null = null;
+
+class BrowserCatalog {
+  private itemByMal: Map<number, BrowserCatalogItem>;
+
+  constructor(private items: BrowserCatalogItem[]) {
+    this.itemByMal = new Map(items.map((item) => [item.mal_id, item]));
+  }
+
+  search(query: string, limit: number, offset: number) {
+    const normalized = query.trim().toLocaleLowerCase();
+    const numericId = /^\d+$/.test(normalized) ? Number(normalized) : null;
+    const matches = this.items.filter((item) =>
+      numericId === item.mal_id ||
+      !normalized ||
+      [item.title_zh, item.title_native, item.title_en]
+        .some((title) => title?.toLocaleLowerCase().includes(normalized)),
+    );
+    return {
+      items: matches.slice(offset, offset + limit).map(publicAnime),
+      total: matches.length,
+    };
+  }
+
+  anime(malId: number) {
+    const item = this.itemByMal.get(malId);
+    if (!item) throw new Error("未找到这部番剧");
+    return publicAnime(item);
+  }
+
+  animeMany(malIds: number[]) {
+    return malIds.flatMap((malId) => {
+      const item = this.itemByMal.get(malId);
+      return item ? [publicAnime(item)] : [];
+    });
+  }
+}
+
+async function readyCatalog() {
+  if (catalogRuntime) return catalogRuntime;
+  const manifest = await catalogManifest() ?? await installedManifest();
+  if (!manifest) throw new Error("作品目录正在下载");
+  const items = await readJson<BrowserCatalogItem[]>(
+    await modelDirectory(false),
+    manifest.browser_catalog.path,
+  );
+  catalogRuntime = new BrowserCatalog(items);
+  return catalogRuntime;
+}
 
 async function readyRuntime() {
   if (runtime) return runtime;
@@ -1135,13 +1198,14 @@ self.addEventListener("message", async (event: MessageEvent<ModelWorkerRequest>)
       const root = await navigator.storage.getDirectory();
       await root.removeEntry(MODEL_DIRECTORY, { recursive: true });
       runtime = null;
+      catalogRuntime = null;
       value = undefined;
     } else if (request.type === "search") {
-      value = (await readyRuntime()).search(request.query, request.limit, request.offset);
+      value = (await readyCatalog()).search(request.query, request.limit, request.offset);
     } else if (request.type === "anime") {
-      value = (await readyRuntime()).anime(request.malId);
+      value = (await readyCatalog()).anime(request.malId);
     } else if (request.type === "animeMany") {
-      value = (await readyRuntime()).animeMany(request.malIds);
+      value = (await readyCatalog()).animeMany(request.malIds);
     } else if (request.type === "neighborStats") {
       value = await (await readyRuntime()).neighborStats(request.ratings, request.negativeItems);
     } else {

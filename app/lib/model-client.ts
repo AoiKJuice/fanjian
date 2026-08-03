@@ -26,6 +26,14 @@ type ModelWorkerRequestWithoutId = ModelWorkerRequest extends infer Request
 let worker: Worker | null = null;
 let requestId = 0;
 const pending = new Map<number, PendingRequest>();
+const downloadListeners = new Set<() => void>();
+let downloadSnapshot: ModelStatus | null = null;
+let activeDownload: Promise<ModelStatus> | null = null;
+
+function publishDownloadStatus(status: ModelStatus) {
+  downloadSnapshot = status;
+  downloadListeners.forEach((listener) => listener());
+}
 
 function manifestUrl() {
   return `${browserModelBaseUrl}/browser-model-manifest.json`;
@@ -71,20 +79,59 @@ function call<T>(
   });
 }
 
-export function browserModelStatus() {
-  return call<ModelStatus>({
+export async function browserModelStatus() {
+  const status = await call<ModelStatus>({
     type: "status",
     manifestUrl: manifestUrl(),
   });
+  if (!activeDownload) publishDownloadStatus(status);
+  return status;
 }
 
 export function downloadBrowserModel(
-  onProgress: (progress: ModelDownloadProgress) => void,
+  onProgress?: (progress: ModelDownloadProgress) => void,
 ) {
-  return call<ModelStatus>(
+  if (activeDownload) return activeDownload;
+  publishDownloadStatus({
+    state: "downloading",
+    downloadedBytes: downloadSnapshot?.downloadedBytes ?? 0,
+    totalBytes: downloadSnapshot?.totalBytes ?? 3263204947,
+    manifest: downloadSnapshot?.manifest,
+  });
+  const task = call<ModelStatus>(
     { type: "download", manifestUrl: manifestUrl() },
-    onProgress,
+    (progress) => {
+      publishDownloadStatus(progress);
+      onProgress?.(progress);
+    },
   );
+  activeDownload = task;
+  void task.then(
+    (status) => publishDownloadStatus(status),
+    (reason: Error) => publishDownloadStatus({
+      state: "error",
+      downloadedBytes: downloadSnapshot?.downloadedBytes ?? 0,
+      totalBytes: downloadSnapshot?.totalBytes ?? 3263204947,
+      error: reason.message,
+      manifest: downloadSnapshot?.manifest,
+    }),
+  ).finally(() => {
+    if (activeDownload === task) activeDownload = null;
+  });
+  return task;
+}
+
+export function subscribeBrowserModelStatus(listener: () => void) {
+  downloadListeners.add(listener);
+  return () => downloadListeners.delete(listener);
+}
+
+export function browserModelStatusSnapshot() {
+  return downloadSnapshot;
+}
+
+export function browserModelServerSnapshot() {
+  return null;
 }
 
 export function deleteBrowserModel() {

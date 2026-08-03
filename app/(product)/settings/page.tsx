@@ -14,8 +14,18 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "radix-ui";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { PageHeader, StatePanel } from "../../components/ui";
+import { browserModelEnabled } from "../../lib/browser-mode";
+import {
+  browserModelServerSnapshot,
+  browserModelStatus,
+  browserModelStatusSnapshot,
+  downloadBrowserModel,
+  subscribeBrowserModelStatus,
+} from "../../lib/model-client";
+import type { ModelStatus } from "../../lib/model-types";
+import { serializeProfileBackup } from "../../lib/profile-backup";
 import {
   selectActiveProfile,
   useActiveProfile,
@@ -62,20 +72,7 @@ export default function SettingsPage() {
   async function exportProfile(profile: Profile) {
     try {
       const items = await loadLibrary(profile.id);
-      const payload = JSON.stringify(
-        {
-          exported_at: new Date().toISOString(),
-          profile,
-          ratings: items.map(({ mal_id, rating, status, updated_at }) => ({
-            mal_id,
-            rating,
-            status,
-            updated_at,
-          })),
-        },
-        null,
-        2,
-      );
+      const payload = serializeProfileBackup(profile, items);
       const url = URL.createObjectURL(
         new Blob([payload], { type: "application/json" }),
       );
@@ -188,13 +185,16 @@ export default function SettingsPage() {
           <Database size={24} weight="duotone" />
           <h2>数据与模型</h2>
         </div>
+        {browserModelEnabled && <BrowserModelDownload />}
         <dl className="version-list">
           <div><dt>数据版本</dt><dd>{model?.data_version ?? "读取中"}</dd></div>
           <div><dt>模型版本</dt><dd>{model?.model_version ?? "读取中"}</dd></div>
           <div><dt>训练用户</dt><dd>{model?.training_users.toLocaleString() ?? "—"}</dd></div>
           <div><dt>训练评分</dt><dd>{model?.training_ratings.toLocaleString() ?? "—"}</dd></div>
           <div><dt>作品目录</dt><dd>{model?.catalog_items.toLocaleString() ?? "—"}</dd></div>
-          <div><dt>索引状态</dt><dd><span className="status-dot" /> 已加载</dd></div>
+          {!browserModelEnabled && (
+            <div><dt>索引状态</dt><dd><span className="status-dot" /> 已加载</dd></div>
+          )}
         </dl>
       </section>
       <section className="settings-section">
@@ -203,7 +203,8 @@ export default function SettingsPage() {
           <h2>隐私</h2>
         </div>
         <div className="privacy-facts">
-          <strong>评分与反馈仅保存在本机</strong>
+          <strong>资料、评分、收藏与推荐历史只保存在此设备</strong>
+          <strong>服务器不接收这些数据</strong>
           <strong>Bangumi Access Token 不保存</strong>
         </div>
         <div className="settings-actions">
@@ -250,6 +251,62 @@ export default function SettingsPage() {
           </Dialog.Root>
         </section>
       ))}
+    </div>
+  );
+}
+
+function BrowserModelDownload() {
+  const [storedStatus, setStoredStatus] = useState<ModelStatus | null>(null);
+  const liveStatus = useSyncExternalStore(
+    subscribeBrowserModelStatus,
+    browserModelStatusSnapshot,
+    browserModelServerSnapshot,
+  );
+  useEffect(() => {
+    void browserModelStatus().then(setStoredStatus).catch((reason) => {
+      setStoredStatus({
+        state: "error",
+        downloadedBytes: 0,
+        totalBytes: 3263204947,
+        error: reason instanceof Error ? reason.message : "模型状态读取失败",
+      });
+    });
+  }, []);
+
+  const status = liveStatus ?? storedStatus;
+  const percent = status?.totalBytes
+    ? Math.min(100, Math.floor((status.downloadedBytes / status.totalBytes) * 100))
+    : 0;
+  const downloading = status?.state === "downloading";
+  const ready = status?.state === "ready";
+
+  function startDownload() {
+    void downloadBrowserModel().then(setStoredStatus).catch(() => undefined);
+  }
+
+  return (
+    <div className="model-download-settings">
+      <div>
+        <strong>
+          {ready
+            ? "模型已下载"
+            : downloading
+              ? `正在下载模型 ${percent}%`
+              : status?.state === "error"
+                ? "模型下载失败"
+                : percent > 0
+                  ? `模型已下载 ${percent}%`
+                  : "模型尚未下载"}
+        </strong>
+        {!ready && (
+          <progress value={percent} max={100} aria-label={`模型下载进度 ${percent}%`} />
+        )}
+      </div>
+      {!ready && !downloading && (
+        <button className="button primary" type="button" onClick={startDownload}>
+          {percent > 0 ? "继续下载" : "下载模型"}
+        </button>
+      )}
     </div>
   );
 }
