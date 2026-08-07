@@ -9,8 +9,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AnimeCover } from "../app/components/anime-cover";
 import { RecommendationCard } from "../app/components/recommendation-card";
 import { Confidence, StatePanel } from "../app/components/ui";
-import type { Recommendation } from "../app/lib/data";
+import { useBangumiAnime } from "../app/lib/bangumi-client";
+import type { Anime, Recommendation } from "../app/lib/data";
 import { recommendationPageItems } from "../app/lib/pagination";
+
+function BangumiProbe({ anime }: { anime?: Anime }) {
+  const enriched = useBangumiAnime(anime);
+  return <span>{enriched?.title_zh ?? "等待作品数据"}</span>;
+}
 
 const recommendation: Recommendation = {
   anime: {
@@ -51,6 +57,11 @@ afterEach(() => {
 });
 
 describe("shared interface components", () => {
+  it("allows detail pages to render before anime data is available", () => {
+    render(<BangumiProbe />);
+    expect(screen.getByText("等待作品数据")).toBeVisible();
+  });
+
   it("builds compact, stable recommendation pagination", () => {
     expect(recommendationPageItems(1, 5)).toEqual([1, 2, 3, 4, 5]);
     expect(recommendationPageItems(6, 12)).toEqual([1, "ellipsis", 5, 6, 7, "ellipsis", 12]);
