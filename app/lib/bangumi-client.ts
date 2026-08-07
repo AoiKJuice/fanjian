@@ -110,7 +110,7 @@ export function useBangumiAnime(anime: Anime | null | undefined) {
       active = false;
     };
   }, [malId]);
-  const metadata = result?.malId === malId ? result.metadata : null;
+  const metadata = result && result.malId === malId ? result.metadata : null;
   return useMemo(
     () => anime ? mergeBangumiAnime(anime, metadata) : anime,
     [anime, metadata],
