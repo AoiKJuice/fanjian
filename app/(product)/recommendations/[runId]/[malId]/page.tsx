@@ -12,10 +12,11 @@ import {
 } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AnimeCover } from "../../../../components/anime-cover";
 import { StatePanel } from "../../../../components/ui";
+import { useBangumiAnime } from "../../../../lib/bangumi-client";
 import {
   loadCollections,
   loadRecommendations,
@@ -29,9 +30,12 @@ const HIDE_UNDO_DELAY_MS = 3200;
 export default function RecommendationDetailPage() {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams<{ runId: string; malId: string }>();
   const runId = Number(params.runId);
   const malId = Number(params.malId);
+  const fromPage = Math.max(1, Number(searchParams.get("fromPage")) || 1);
+  const returnHref = `/recommendations?run=${runId}&page=${fromPage}`;
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
   const [pendingCollection, setPendingCollection] = useState<
     "favorites" | "hidden" | null
@@ -56,6 +60,7 @@ export default function RecommendationDetailPage() {
   const item = runQuery.data?.items.find(
     (candidate) => candidate.anime.mal_id === malId,
   );
+  const anime = useBangumiAnime(item?.anime);
   const isFavorite = Boolean(
     collectionsQuery.data?.favorites.some(
       (entry) => entry.mal_id === malId,
@@ -121,7 +126,7 @@ export default function RecommendationDetailPage() {
         void queryClient.invalidateQueries({
           queryKey: ["recommendation-history", profileId],
         });
-        router.push("/recommendations");
+        router.push(returnHref);
         return;
       }
       setActionMessage(
@@ -145,12 +150,12 @@ export default function RecommendationDetailPage() {
   if (runQuery.isPending) {
     return <div className="page"><StatePanel title="正在读取推荐证据" /></div>;
   }
-  if (runQuery.isError || !item) {
+  if (runQuery.isError || !item || !anime) {
     return (
       <div className="page">
         <StatePanel
           title="这条推荐不存在"
-          action={{ label: "返回推荐", href: "/recommendations" }}
+          action={{ label: "返回推荐", href: returnHref }}
         />
       </div>
     );
@@ -159,33 +164,33 @@ export default function RecommendationDetailPage() {
     (sum, count) => sum + count,
     0,
   );
-  const synopsis = item.anime.synopsis || "暂未提供内容简介。";
+  const synopsis = anime.synopsis || "暂未提供内容简介。";
   const synopsisCanFold = synopsis.length > 90;
 
   return (
     <div className="page detail-page">
-      <Link className="back-link" href="/recommendations">
+      <Link className="back-link" href={returnHref}>
         <ArrowLeft size={17} /> 返回推荐 #{runId}
       </Link>
       <section className="detail-hero">
         <AnimeCover
-          index={item.anime.cover_index}
-          title={item.anime.title_zh}
-          src={item.anime.cover_url}
+          index={anime.cover_index}
+          title={anime.title_zh}
+          src={anime.cover_url}
           priority
         />
         <div className="detail-copy">
-          <p className="eyebrow">{item.anime.year} · {item.anime.format} · {item.anime.episodes} 集</p>
-          <h1>{item.anime.title_zh}</h1>
-          <p className="native-title">{item.anime.title_native} · {item.anime.title_en}</p>
+          <p className="eyebrow">{anime.year} · {anime.format} · {anime.episodes} 集</p>
+          <h1>{anime.title_zh}</h1>
+          <p className="native-title">{anime.title_native} · {anime.title_en}</p>
           <div className="detail-metadata">
             <span className="bangumi-score">
               <Star size={16} weight="fill" aria-hidden />
-              Bangumi {item.anime.bangumi_score?.toFixed(1) ?? "暂无"}
+              Bangumi {anime.bangumi_score?.toFixed(1) ?? "暂无"}
             </span>
-            {(item.anime.matched_tags?.length ?? 0) > 0 && (
+            {(anime.matched_tags?.length ?? 0) > 0 && (
               <ul className="matched-tags" aria-label="命中喜爱作品标签">
-                {item.anime.matched_tags?.slice(0, 3).map((tag) => (
+                {anime.matched_tags?.slice(0, 3).map((tag) => (
                   <li key={tag}>{tag}</li>
                 ))}
               </ul>
