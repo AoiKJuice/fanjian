@@ -10,12 +10,14 @@ import {
 } from "@phosphor-icons/react";
 import { Dialog } from "radix-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RecommendationCard } from "../../components/recommendation-card";
 import { ThemeSelect } from "../../components/theme-select";
 import { StatePanel } from "../../components/ui";
 import {
   loadRecommendations,
+  loadRecommendationRun,
   loadProfiles,
   removeCollectionItem,
   sendRecommendationFeedback,
@@ -24,15 +26,21 @@ import { recommendationPageItems } from "../../lib/pagination";
 import { useActiveProfile } from "../../providers";
 
 const PAGE_SIZE = 20;
+const RETURN_STATE_KEY = "fanjian-recommendations-return";
 
 export default function RecommendationsPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedRun = Math.max(0, Number(searchParams.get("run")) || 0);
+  const requestedPage = Math.max(1, Number(searchParams.get("page")) || 1);
+  const restoredRun = useRef(0);
   const [view, setView] = useState<"grid" | "list">("grid");
   const [format, setFormat] = useState("全部");
   const [minimum, setMinimum] = useState(0);
   const [sort, setSort] = useState("推荐分数");
   const [filterRelated, setFilterRelated] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(requestedPage);
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
     queryFn: loadProfiles,
@@ -40,8 +48,13 @@ export default function RecommendationsPage() {
   const profile = useActiveProfile(profilesQuery.data);
   const profileId = profile?.id;
   const recommendationsQuery = useQuery({
-    queryKey: ["recommendations", profileId],
-    queryFn: () => loadRecommendations(profileId!),
+    queryKey: ["recommendations", profileId, requestedRun || "new"],
+    queryFn: async () => {
+      if (!requestedRun) return loadRecommendations(profileId!);
+      const run = await loadRecommendationRun(requestedRun);
+      if (run.profile_id !== profileId) throw new Error("推荐记录不属于当前资料");
+      return { items: run.items, runId: run.id, source: "api" as const };
+    },
     enabled: Boolean(profileId && profile.rating_count >= 5),
   });
   const { data, isError, isPending } = recommendationsQuery;
@@ -62,12 +75,43 @@ export default function RecommendationsPage() {
   const pageItems = filtered.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
   const activeFilterCount = Number(format !== "全部") + Number(minimum > 0) + Number(filterRelated);
 
+  useEffect(() => {
+    if (!data?.runId || restoredRun.current === data.runId) return;
+    restoredRun.current = data.runId;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(RETURN_STATE_KEY) ?? "null") as
+        | { runId: number; page: number; scrollY: number }
+        | null;
+      if (saved?.runId !== data.runId || saved.page !== activePage) return;
+      sessionStorage.removeItem(RETURN_STATE_KEY);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        window.scrollTo({ top: saved.scrollY, behavior: "auto" });
+      }));
+    } catch {
+      sessionStorage.removeItem(RETURN_STATE_KEY);
+    }
+  }, [activePage, data?.runId, pageItems.length]);
+
   const changePage = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    const nextPage = Math.max(1, Math.min(page, totalPages));
+    setCurrentPage(nextPage);
+    const query = new URLSearchParams(searchParams.toString());
+    query.set("page", String(nextPage));
+    if (data?.runId) query.set("run", String(data.runId));
+    router.replace(`/recommendations?${query.toString()}`, { scroll: false });
     window.scrollTo({
       top: 0,
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
     });
+  };
+
+  const rememberPosition = () => {
+    if (!data?.runId) return;
+    sessionStorage.setItem(RETURN_STATE_KEY, JSON.stringify({
+      runId: data.runId,
+      page: activePage,
+      scrollY: window.scrollY,
+    }));
   };
 
   const handleFeedback = useCallback(
@@ -205,6 +249,8 @@ export default function RecommendationsPage() {
                 item={item}
                 compact={view === "list"}
                 runId={data?.runId}
+                detailHref={`/recommendations/${data?.runId}/${item.anime.mal_id}?fromPage=${activePage}`}
+                onOpen={rememberPosition}
                 onFeedback={handleFeedback}
               />
             ))}

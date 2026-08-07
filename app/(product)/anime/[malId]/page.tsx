@@ -8,6 +8,7 @@ import { AnimeCover } from "../../../components/anime-cover";
 import { RatingControl } from "../../../components/rating-control";
 import { ThemeSelect } from "../../../components/theme-select";
 import { StatePanel } from "../../../components/ui";
+import { useBangumiAnime } from "../../../lib/bangumi-client";
 import {
   loadAnime,
   loadLibrary,
@@ -41,6 +42,7 @@ export default function AnimeDetailPage() {
     queryFn: () => loadAnime(malId),
     enabled: Number.isFinite(malId),
   });
+  const item = useBangumiAnime(animeQuery.data);
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
     queryFn: loadProfiles,
@@ -72,7 +74,6 @@ export default function AnimeDetailPage() {
   if (animeQuery.isPending) {
     return <div className="page"><StatePanel title="正在读取作品" /></div>;
   }
-  const item = animeQuery.data;
   if (animeQuery.isError || !item) {
     return <div className="page"><StatePanel title="未找到这部番剧" /></div>;
   }
