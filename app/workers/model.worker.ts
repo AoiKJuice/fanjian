@@ -1,6 +1,10 @@
 /// <reference lib="webworker" />
 
 import type { Anime, Recommendation } from "../lib/data";
+import {
+  nonPrimaryAnimeIds,
+  shortFormAnimeIds,
+} from "../lib/anime-metadata.generated";
 import { parseNpyShape } from "../lib/npy";
 import type {
   BrowserCatalogItem,
@@ -1079,7 +1083,10 @@ function publicAnime(item: BrowserCatalogItem): Anime {
     bangumi_score: item.bangumi_score,
     matched_tags: item.matched_tags,
     is_sequel: item.sequel || looksLikeContinuation(item.title_en),
-    is_derivative: isAncillary(item.format, item.title_en),
+    is_derivative:
+      nonPrimaryAnimeIds.has(item.mal_id)
+      || isAncillary(item.format, item.title_en),
+    is_short_form: shortFormAnimeIds.has(item.mal_id),
   };
 }
 
@@ -1112,8 +1119,9 @@ function isAncillary(format: string | null, title: string | null) {
 }
 
 function looksLikeContinuation(title: string | null) {
-  return /(?:\b(?:season|part)\s*(?:[2-9]|ii|iii|iv)\b|\b(?:2nd|3rd|4th)\b|(?:^|[\s:])(?:ii|iii|iv)(?:$|[\s:])|[×x]\s*(?:[2-9]|\d{3,4})\b|\br[2-9]\b)/i
-    .test((title ?? "").normalize("NFKC"));
+  const value = (title ?? "").normalize("NFKC");
+  return /(?:\b(?:season|part)\s*(?:[2-9]|ii|iii|iv)\b|\b(?:2nd|3rd|4th)\b|[×x]\s*(?:[2-9]|\d{3,4})\b|\br[2-9]\b)/i.test(value)
+    || /(?:^|[\s:])(?:II|III|IV)(?:$|[\s:])/.test(value);
 }
 
 function requiresSeriesContext(format: string | null, title: string | null) {

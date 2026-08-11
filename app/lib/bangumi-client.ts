@@ -13,12 +13,43 @@ type BangumiSubject = {
   rating?: { score?: number };
 };
 
+type LegacyCommunityItem = {
+  id?: number;
+  title?: string;
+  summary?: string;
+  replies?: number;
+  timestamp?: number;
+  user?: { nickname?: string; username?: string };
+};
+
+type LegacySubject = {
+  topic?: LegacyCommunityItem[];
+  blog?: LegacyCommunityItem[];
+};
+
 export type BangumiMetadata = {
   score: number | null;
   synopsis: string;
 };
 
-const requests = new Map<number, Promise<BangumiMetadata | null>>();
+export type BangumiCommunityEntry = {
+  id: number;
+  kind: "讨论" | "长评";
+  title: string;
+  summary: string;
+  author: string;
+  replies: number;
+  timestamp: number;
+  url: string;
+};
+
+export type BangumiCommunity = {
+  subjectId: number;
+  entries: BangumiCommunityEntry[];
+};
+
+const metadataRequests = new Map<number, Promise<BangumiMetadata | null>>();
+const communityRequests = new Map<number, Promise<BangumiCommunity | null>>();
 const queue: Array<() => void> = [];
 let activeRequests = 0;
 
@@ -36,14 +67,13 @@ function schedule<T>(task: () => Promise<T>) {
   });
 }
 
-async function cachedSubject(subjectId: number): Promise<BangumiSubject> {
-  const url = `https://api.bgm.tv/v0/subjects/${subjectId}`;
+async function cachedJson<T>(url: string): Promise<T> {
   const request = new Request(url, { headers: { Accept: "application/json" } });
   const cache = "caches" in globalThis ? await caches.open(CACHE_NAME) : null;
   const cached = await cache?.match(request);
   const cachedAt = Number(cached?.headers.get("x-fanjian-cached-at") ?? 0);
   if (cached && Date.now() - cachedAt < CACHE_MAX_AGE_MS) {
-    return cached.json() as Promise<BangumiSubject>;
+    return cached.json() as Promise<T>;
   }
 
   const response = await fetch(request);
@@ -57,13 +87,23 @@ async function cachedSubject(subjectId: number): Promise<BangumiSubject> {
       },
     }));
   }
-  return JSON.parse(text) as BangumiSubject;
+  return JSON.parse(text) as T;
+}
+
+async function cachedSubject(subjectId: number): Promise<BangumiSubject> {
+  return cachedJson<BangumiSubject>(
+    `https://api.bgm.tv/v0/subjects/${subjectId}`,
+  );
+}
+
+export function bangumiSubjectId(malId: number) {
+  return bangumiSubjectByMal.get(malId) ?? null;
 }
 
 export function loadBangumiMetadata(malId: number) {
   const subjectId = bangumiSubjectByMal.get(malId);
   if (!subjectId) return Promise.resolve(null);
-  const existing = requests.get(subjectId);
+  const existing = metadataRequests.get(subjectId);
   if (existing) return existing;
   const task = schedule(async () => {
     try {
@@ -77,7 +117,63 @@ export function loadBangumiMetadata(malId: number) {
       return null;
     }
   });
-  requests.set(subjectId, task);
+  metadataRequests.set(subjectId, task);
+  return task;
+}
+
+export async function loadBangumiMetadataMany(malIds: number[]) {
+  const pairs = await Promise.all(
+    [...new Set(malIds)].map(async (malId) => [
+      malId,
+      await loadBangumiMetadata(malId),
+    ] as const),
+  );
+  return new Map(pairs);
+}
+
+function communityEntry(
+  item: LegacyCommunityItem,
+  kind: "讨论" | "长评",
+): BangumiCommunityEntry | null {
+  const id = Number(item.id);
+  const title = item.title?.trim();
+  if (!Number.isFinite(id) || !title) return null;
+  return {
+    id,
+    kind,
+    title,
+    summary: item.summary?.trim() ?? "",
+    author: item.user?.nickname?.trim() || item.user?.username?.trim() || "Bangumi 用户",
+    replies: Number(item.replies) || 0,
+    timestamp: Number(item.timestamp) || 0,
+    url: kind === "讨论"
+      ? `https://bgm.tv/subject/topic/${id}`
+      : `https://bgm.tv/blog/${id}`,
+  };
+}
+
+export function loadBangumiCommunity(malId: number) {
+  const subjectId = bangumiSubjectByMal.get(malId);
+  if (!subjectId) return Promise.resolve(null);
+  const existing = communityRequests.get(subjectId);
+  if (existing) return existing;
+  const task = schedule(async () => {
+    try {
+      const subject = await cachedJson<LegacySubject>(
+        `https://api.bgm.tv/subject/${subjectId}?responseGroup=large`,
+      );
+      const entries = [
+        ...(subject.topic ?? []).map((item) => communityEntry(item, "讨论")),
+        ...(subject.blog ?? []).map((item) => communityEntry(item, "长评")),
+      ].filter((item): item is BangumiCommunityEntry => item !== null)
+        .sort((left, right) => right.timestamp - left.timestamp)
+        .slice(0, 8);
+      return { subjectId, entries };
+    } catch {
+      return null;
+    }
+  });
+  communityRequests.set(subjectId, task);
   return task;
 }
 

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { AnimeCover } from "../../../components/anime-cover";
+import { AnimeCommunity } from "../../../components/anime-community";
 import { RatingControl } from "../../../components/rating-control";
 import { ThemeSelect } from "../../../components/theme-select";
 import { StatePanel } from "../../../components/ui";
@@ -139,6 +140,7 @@ export default function AnimeDetailPage() {
         <p className="eyebrow">系列关系</p>
         <h2>观看顺序</h2>
       </section>
+      <AnimeCommunity malId={item.mal_id} title={item.title_zh || item.title_native} />
     </div>
   );
 }

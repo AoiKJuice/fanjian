@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AnimeCover } from "../../../../components/anime-cover";
+import { AnimeCommunity } from "../../../../components/anime-community";
 import { StatePanel } from "../../../../components/ui";
 import { useBangumiAnime } from "../../../../lib/bangumi-client";
 import {
@@ -320,6 +321,7 @@ export default function RecommendationDetailPage() {
           </div>
         </section>
       </div>
+      <AnimeCommunity malId={anime.mal_id} title={anime.title_zh} />
     </div>
   );
 }

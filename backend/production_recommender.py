@@ -12,6 +12,11 @@ import numpy as np
 import polars as pl
 
 
+PACKAGED_RELATION_FLAGS = (
+    Path(__file__).parent / "resources" / "non_primary_anime.json"
+)
+
+
 @dataclass(frozen=True)
 class IndexedNeighbor:
     user_idx: int
@@ -229,6 +234,25 @@ class DiskBackedUserKNN:
                     self.catalog["title"].to_list(),
                     strict=True,
                 )
+            ],
+            dtype=bool,
+        )
+        relation_flags_path = self.root / "non_primary_anime.json"
+        if not relation_flags_path.exists():
+            relation_flags_path = PACKAGED_RELATION_FLAGS
+        relation_flags = (
+            set(
+                json.loads(
+                    relation_flags_path.read_text(encoding="utf-8")
+                )["non_primary_mal_ids"]
+            )
+            if relation_flags_path.exists()
+            else set()
+        )
+        self.catalog_non_primary = np.asarray(
+            [
+                int(mal_id) in relation_flags
+                for mal_id in self.catalog["mal_id"].to_list()
             ],
             dtype=bool,
         )
@@ -502,16 +526,17 @@ class DiskBackedUserKNN:
 
     @staticmethod
     def _looks_like_continuation(title: str | None) -> bool:
-        value = unicodedata.normalize("NFKC", title or "").lower()
+        value = unicodedata.normalize("NFKC", title or "")
         return bool(
             re.search(
                 r"(?:\b(?:season|part)\s*(?:[2-9]|ii|iii|iv)\b"
                 r"|\b(?:2nd|3rd|4th)\b"
-                r"|(?:^|[\s:])(?:ii|iii|iv)(?:$|[\s:])"
                 r"|[×x]\s*(?:[2-9]|\d{3,4})\b"
                 r"|\br[2-9]\b)",
                 value,
+                re.IGNORECASE,
             )
+            or re.search(r"(?:^|[\s:])(?:II|III|IV)(?:$|[\s:])", value)
         )
 
     @classmethod
@@ -816,7 +841,11 @@ class DiskBackedUserKNN:
                 self.catalog_sequels[item_idx]
                 or self.catalog_inferred_continuations[item_idx]
             ),
-            "is_derivative": bool(self.catalog_ancillary[item_idx]),
+            "is_derivative": bool(
+                self.catalog_non_primary[item_idx]
+                or self.catalog_ancillary[item_idx]
+                or self.catalog_requires_series_context[item_idx]
+            ),
         }
 
     def recommend(
@@ -918,6 +947,7 @@ class DiskBackedUserKNN:
             eligible &= ~(
                 self.catalog_sequels
                 | self.catalog_inferred_continuations
+                | self.catalog_non_primary
             )
             profile_series = {
                 str(self.catalog_series_keys[item_idx])
