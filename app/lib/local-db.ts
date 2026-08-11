@@ -331,6 +331,7 @@ export async function saveLocalRun(
     data_version: dataVersion,
     status,
     items,
+    filters: JSON.stringify(filters),
   } as RecommendationRun;
 }
 

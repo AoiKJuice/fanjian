@@ -668,15 +668,33 @@ class BrowserRecommender {
     }> = [];
     const formats = new Set(payload.formats.map((value) => value.toUpperCase()));
     for (let item = 0; item < itemCount; item++) {
+      const catalogItem = this.catalog[item];
+      const malId = this.malIds[item];
+      const bangumiScore = Number(catalogItem.bangumi_score);
+      const year = Number(catalogItem.year);
       if (
         support[item] < payload.minSupport ||
         weightSum[item] <= 0 ||
         numberAt(this.itemCounts, item) < 20 ||
-        excluded.has(this.malIds[item]) ||
-        (formats.size && !formats.has(this.catalog[item].format.toUpperCase()))
+        excluded.has(malId) ||
+        (formats.size && !formats.has(catalogItem.format.toUpperCase())) ||
+        (payload.minimumBangumiScore != null &&
+          (!Number.isFinite(bangumiScore) || bangumiScore < payload.minimumBangumiScore)) ||
+        (payload.minimumYear != null &&
+          (!Number.isFinite(year) || year < payload.minimumYear)) ||
+        (payload.maximumYear != null &&
+          (!Number.isFinite(year) || year > payload.maximumYear)) ||
+        (payload.includeShortForm === false && shortFormAnimeIds.has(malId))
       ) continue;
+      if (payload.excludeRelated && (
+        catalogItem.sequel ||
+        this.inferredContinuation[item] ||
+        this.requiresContext[item] ||
+        this.ancillary[item] ||
+        nonPrimaryAnimeIds.has(malId)
+      )) continue;
       if (!payload.allowSequels) {
-        if (this.catalog[item].sequel || this.inferredContinuation[item]) continue;
+        if (catalogItem.sequel || this.inferredContinuation[item]) continue;
         if (this.requiresContext[item] && !profileSeries.has(this.seriesKeys[item])) continue;
       }
       const estimate = weightedSum[item] / weightSum[item];

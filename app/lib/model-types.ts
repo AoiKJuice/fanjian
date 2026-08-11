@@ -46,6 +46,11 @@ export type ModelRecommendationRequest = {
   minSupport: number;
   allowSequels: boolean;
   formats: string[];
+  minimumBangumiScore?: number | null;
+  minimumYear?: number | null;
+  maximumYear?: number | null;
+  includeShortForm?: boolean;
+  excludeRelated?: boolean;
 };
 
 export type ModelRecommendationResult = {

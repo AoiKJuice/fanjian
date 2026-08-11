@@ -46,6 +46,32 @@ export type RecommendationPayload = {
   source: "api";
 };
 
+export type RecommendationFilters = {
+  format?: string;
+  minimumSupport?: number;
+  minimumBangumiScore?: number | null;
+  minimumYear?: number | null;
+  maximumYear?: number | null;
+  includeShortForm?: boolean;
+  excludeRelated?: boolean;
+};
+
+export function recommendationFilterRecord(
+  filters: RecommendationFilters = {},
+) {
+  return {
+    limit: 100,
+    min_support: Math.max(5, filters.minimumSupport ?? 0),
+    allow_sequels: true,
+    formats: filters.format && filters.format !== "全部" ? [filters.format] : [],
+    minimum_bangumi_score: filters.minimumBangumiScore ?? null,
+    minimum_year: filters.minimumYear ?? null,
+    maximum_year: filters.maximumYear ?? null,
+    include_short_form: filters.includeShortForm ?? true,
+    exclude_related: filters.excludeRelated ?? false,
+  };
+}
+
 export type Profile = {
   id: number;
   name: string;
@@ -164,6 +190,7 @@ export type RecommendationRun = {
   data_version: string;
   status: "ready" | "insufficient";
   items: Recommendation[];
+  filters?: string;
 };
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -501,7 +528,9 @@ export async function deleteRecommendationRun(runId: number): Promise<void> {
 
 export async function loadRecommendations(
   profileId = 1,
+  filters: RecommendationFilters = {},
 ): Promise<RecommendationPayload> {
+  const requestFilters = recommendationFilterRecord(filters);
   if (browserModelEnabled) {
     const [ratings, excluded, negativeItems, status] = await Promise.all([
       localRatingsMap(profileId),
@@ -514,10 +543,15 @@ export async function loadRecommendations(
       ratings,
       excluded,
       negativeItems,
-      limit: 100,
-      minSupport: 5,
-      allowSequels: true,
-      formats: [],
+      limit: requestFilters.limit,
+      minSupport: requestFilters.min_support,
+      allowSequels: requestFilters.allow_sequels,
+      formats: requestFilters.formats,
+      minimumBangumiScore: requestFilters.minimum_bangumi_score,
+      minimumYear: requestFilters.minimum_year,
+      maximumYear: requestFilters.maximum_year,
+      includeShortForm: requestFilters.include_short_form,
+      excludeRelated: requestFilters.exclude_related,
     });
     const run = await saveLocalRun(
       profileId,
@@ -525,7 +559,7 @@ export async function loadRecommendations(
       status.manifest.data_version,
       Object.keys(ratings).length >= 10 ? "ready" : "insufficient",
       result.items,
-      { limit: 100, min_support: 5, allow_sequels: true, formats: [] },
+      requestFilters,
     );
     return {
       items: enrichBrowserRecommendations(run.items),
@@ -541,10 +575,10 @@ export async function loadRecommendations(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       profile_id: profileId,
-      limit: 100,
-      min_support: 5,
-      allow_sequels: true,
-      formats: [],
+      limit: requestFilters.limit,
+      min_support: requestFilters.min_support,
+      allow_sequels: requestFilters.allow_sequels,
+      formats: requestFilters.formats,
     }),
   });
   return { items: payload.items, runId: payload.id, source: "api" };

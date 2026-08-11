@@ -36,7 +36,23 @@ export default function RecommendationDetailPage() {
   const runId = Number(params.runId);
   const malId = Number(params.malId);
   const fromPage = Math.max(1, Number(searchParams.get("fromPage")) || 1);
-  const returnHref = `/recommendations?run=${runId}&page=${fromPage}`;
+  const returnParams = new URLSearchParams(searchParams.toString());
+  returnParams.delete("fromPage");
+  returnParams.set("run", String(runId));
+  returnParams.set("page", String(fromPage));
+  const returnHref = `/recommendations?${returnParams.toString()}`;
+  const yearRange = (searchParams.get("year") ?? "").split("-");
+  const returnFilters = {
+    format: searchParams.get("format") || "全部",
+    minimumSupport: Number(searchParams.get("support")) || 0,
+    minimumBangumiScore: searchParams.has("score")
+      ? Number(searchParams.get("score"))
+      : null,
+    minimumYear: searchParams.has("year") ? Number(yearRange[0]) : null,
+    maximumYear: searchParams.has("year") ? Number(yearRange[1]) : null,
+    includeShortForm: searchParams.get("short") !== "0",
+    excludeRelated: searchParams.get("related") === "1",
+  };
   const [synopsisExpanded, setSynopsisExpanded] = useState(false);
   const [pendingCollection, setPendingCollection] = useState<
     "favorites" | "hidden" | null
@@ -116,18 +132,16 @@ export default function RecommendationDetailPage() {
       }
       await collectionsQuery.refetch();
       if (collection === "hidden" && !active) {
-        const refreshed = await loadRecommendations(profileId);
-        queryClient.setQueryData(
-          ["recommendations", profileId],
-          refreshed,
-        );
+        const refreshed = await loadRecommendations(profileId, returnFilters);
         void queryClient.invalidateQueries({
           queryKey: ["dashboard-recommendations", profileId],
         });
         void queryClient.invalidateQueries({
           queryKey: ["recommendation-history", profileId],
         });
-        router.push(returnHref);
+        const refreshedReturnParams = new URLSearchParams(returnParams);
+        refreshedReturnParams.set("run", String(refreshed.runId));
+        router.push(`/recommendations?${refreshedReturnParams.toString()}`);
         return;
       }
       setActionMessage(
