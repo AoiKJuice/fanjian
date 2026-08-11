@@ -1,5 +1,6 @@
 import type { Anime, Recommendation } from "./data";
 import { enrichBrowserRecommendations } from "./anime-metadata";
+import { filterRecommendationsByBangumiScore } from "./bangumi-client";
 import { browserModelEnabled } from "./browser-mode";
 import {
   importAniListInBrowser,
@@ -539,26 +540,34 @@ export async function loadRecommendations(
       browserModelStatus(),
     ]);
     if (!status.manifest) throw new Error("模型尚未下载");
+    const scoreFilterEnabled = requestFilters.minimum_bangumi_score != null;
     const result = await recommendInBrowser({
       ratings,
       excluded,
       negativeItems,
-      limit: requestFilters.limit,
+      limit: scoreFilterEnabled ? 800 : requestFilters.limit,
       minSupport: requestFilters.min_support,
       allowSequels: requestFilters.allow_sequels,
       formats: requestFilters.formats,
-      minimumBangumiScore: requestFilters.minimum_bangumi_score,
+      minimumBangumiScore: null,
       minimumYear: requestFilters.minimum_year,
       maximumYear: requestFilters.maximum_year,
       includeShortForm: requestFilters.include_short_form,
       excludeRelated: requestFilters.exclude_related,
     });
+    const items = scoreFilterEnabled
+      ? await filterRecommendationsByBangumiScore(
+          result.items,
+          requestFilters.minimum_bangumi_score!,
+          requestFilters.limit,
+        )
+      : result.items;
     const run = await saveLocalRun(
       profileId,
       status.manifest.model_version,
       status.manifest.data_version,
       Object.keys(ratings).length >= 10 ? "ready" : "insufficient",
-      result.items,
+      items,
       requestFilters,
     );
     return {
