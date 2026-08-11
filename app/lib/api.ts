@@ -28,6 +28,7 @@ import {
   saveLocalCollections,
   saveLocalRun,
   setLocalCollection,
+  updateLocalRun,
 } from "./local-db";
 import {
   browserModelStatus,
@@ -45,6 +46,12 @@ export type RecommendationPayload = {
   items: Recommendation[];
   runId: number;
   source: "api";
+  hasMore: boolean;
+};
+
+type RecommendationLoadOptions = {
+  limit?: number;
+  runId?: number;
 };
 
 export type RecommendationFilters = {
@@ -192,6 +199,7 @@ export type RecommendationRun = {
   status: "ready" | "insufficient";
   items: Recommendation[];
   filters?: string;
+  has_more?: boolean;
 };
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -530,8 +538,13 @@ export async function deleteRecommendationRun(runId: number): Promise<void> {
 export async function loadRecommendations(
   profileId = 1,
   filters: RecommendationFilters = {},
+  options: RecommendationLoadOptions = {},
 ): Promise<RecommendationPayload> {
   const requestFilters = recommendationFilterRecord(filters);
+  const requestedLimit = Math.max(
+    100,
+    Math.ceil((options.limit ?? 100) / 100) * 100,
+  );
   if (browserModelEnabled) {
     const [ratings, excluded, negativeItems, status] = await Promise.all([
       localRatingsMap(profileId),
@@ -541,11 +554,13 @@ export async function loadRecommendations(
     ]);
     if (!status.manifest) throw new Error("模型尚未下载");
     const scoreFilterEnabled = requestFilters.minimum_bangumi_score != null;
-    const result = await recommendInBrowser({
+    const requestModelPage = (offset: number, limit: number) => recommendInBrowser({
       ratings,
       excluded,
       negativeItems,
-      limit: scoreFilterEnabled ? 800 : requestFilters.limit,
+      offset,
+      limit,
+      minimumAffinity: 60,
       minSupport: requestFilters.min_support,
       allowSequels: requestFilters.allow_sequels,
       formats: requestFilters.formats,
@@ -555,25 +570,46 @@ export async function loadRecommendations(
       includeShortForm: requestFilters.include_short_form,
       excludeRelated: requestFilters.exclude_related,
     });
-    const items = scoreFilterEnabled
-      ? await filterRecommendationsByBangumiScore(
+    let items: Recommendation[] = [];
+    let hasMore = false;
+    if (scoreFilterEnabled) {
+      let modelOffset = 0;
+      let modelHasMore = true;
+      while (items.length < requestedLimit && modelHasMore) {
+        const result = await requestModelPage(modelOffset, 100);
+        const matching = await filterRecommendationsByBangumiScore(
           result.items,
           requestFilters.minimum_bangumi_score!,
-          requestFilters.limit,
-        )
-      : result.items;
-    const run = await saveLocalRun(
-      profileId,
-      status.manifest.model_version,
-      status.manifest.data_version,
-      Object.keys(ratings).length >= 10 ? "ready" : "insufficient",
-      items,
-      requestFilters,
-    );
+          result.items.length,
+        );
+        items.push(...matching);
+        modelOffset += result.items.length;
+        modelHasMore = result.hasMore;
+        if (!result.items.length) break;
+      }
+      hasMore = items.length > requestedLimit || modelHasMore;
+      items = items.slice(0, requestedLimit);
+    } else {
+      const result = await requestModelPage(0, requestedLimit);
+      items = result.items;
+      hasMore = result.hasMore;
+    }
+    const run = options.runId
+      ? await updateLocalRun(options.runId, items, requestFilters, hasMore)
+      : await saveLocalRun(
+          profileId,
+          status.manifest.model_version,
+          status.manifest.data_version,
+          Object.keys(ratings).length >= 10 ? "ready" : "insufficient",
+          items,
+          requestFilters,
+          hasMore,
+        );
     return {
       items: enrichBrowserRecommendations(run.items),
       runId: run.id,
       source: "api",
+      hasMore,
     };
   }
   const payload = await requestJson<{
@@ -584,13 +620,19 @@ export async function loadRecommendations(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       profile_id: profileId,
-      limit: requestFilters.limit,
+      limit: requestedLimit,
       min_support: requestFilters.min_support,
       allow_sequels: requestFilters.allow_sequels,
       formats: requestFilters.formats,
     }),
   });
-  return { items: payload.items, runId: payload.id, source: "api" };
+  const items = payload.items.filter((item) => item.affinity >= 60);
+  return {
+    items,
+    runId: payload.id,
+    source: "api",
+    hasMore: payload.items.length >= requestedLimit,
+  };
 }
 
 export async function sendRecommendationFeedback(

@@ -79,7 +79,10 @@ describe("shared interface components", () => {
 
   it("builds compact, stable recommendation pagination", () => {
     expect(recommendationPageItems(1, 5)).toEqual([1, 2, 3, 4, 5]);
-    expect(recommendationPageItems(6, 12)).toEqual([1, "ellipsis", 5, 6, 7, "ellipsis", 12]);
+    expect(recommendationPageItems(1, 5, true)).toEqual([1, 2, 3, 4, 5, "next"]);
+    expect(recommendationPageItems(6, 12, true)).toEqual([
+      "previous", 6, 7, 8, 9, 10, "next",
+    ]);
   });
 
   it("exposes cover alt text through an accessible image role", () => {

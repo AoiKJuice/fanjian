@@ -132,7 +132,10 @@ export default function RecommendationDetailPage() {
       }
       await collectionsQuery.refetch();
       if (collection === "hidden" && !active) {
-        const refreshed = await loadRecommendations(profileId, returnFilters);
+        const refreshed = await loadRecommendations(profileId, returnFilters, {
+          limit: runQuery.data?.items.length ?? 100,
+          runId,
+        });
         void queryClient.invalidateQueries({
           queryKey: ["dashboard-recommendations", profileId],
         });
