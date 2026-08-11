@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { bangumiSubjectByMal } from "./bangumi-map.generated";
-import type { Anime } from "./data";
+import type { Anime, Recommendation } from "./data";
 
 const CACHE_NAME = "fanjian-bangumi-v1";
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_CONCURRENT_REQUESTS = 4;
+const SCORE_FILTER_BATCH_SIZE = 48;
 
 type BangumiSubject = {
   summary?: string;
@@ -25,6 +26,10 @@ type LegacyCommunityItem = {
 type LegacySubject = {
   topic?: LegacyCommunityItem[];
   blog?: LegacyCommunityItem[];
+};
+
+type LegacyScoreSubject = {
+  rating?: { score?: number };
 };
 
 export type BangumiMetadata = {
@@ -49,6 +54,7 @@ export type BangumiCommunity = {
 };
 
 const metadataRequests = new Map<number, Promise<BangumiMetadata | null>>();
+const scoreRequests = new Map<number, Promise<number | null>>();
 const communityRequests = new Map<number, Promise<BangumiCommunity | null>>();
 const queue: Array<() => void> = [];
 let activeRequests = 0;
@@ -129,6 +135,52 @@ export async function loadBangumiMetadataMany(malIds: number[]) {
     ] as const),
   );
   return new Map(pairs);
+}
+
+export function loadBangumiScore(malId: number) {
+  const subjectId = bangumiSubjectByMal.get(malId);
+  if (!subjectId) return Promise.resolve(null);
+  const existing = scoreRequests.get(subjectId);
+  if (existing) return existing;
+  const task = schedule(async () => {
+    try {
+      const subject = await cachedJson<LegacyScoreSubject>(
+        `https://api.bgm.tv/subject/${subjectId}?responseGroup=small`,
+      );
+      const score = Number(subject.rating?.score);
+      return Number.isFinite(score) && score > 0 ? score : null;
+    } catch {
+      return null;
+    }
+  });
+  scoreRequests.set(subjectId, task);
+  return task;
+}
+
+export async function filterRecommendationsByBangumiScore(
+  recommendations: Recommendation[],
+  minimumScore: number,
+  limit = 100,
+) {
+  const accepted: Recommendation[] = [];
+  for (let offset = 0; offset < recommendations.length; offset += SCORE_FILTER_BATCH_SIZE) {
+    const batch = recommendations
+      .slice(offset, offset + SCORE_FILTER_BATCH_SIZE)
+      .filter((item) => bangumiSubjectByMal.has(item.anime.mal_id));
+    const scores = await Promise.all(
+      batch.map((item) => loadBangumiScore(item.anime.mal_id)),
+    );
+    for (let index = 0; index < batch.length; index++) {
+      const score = scores[index];
+      if (score == null || score < minimumScore) continue;
+      accepted.push({
+        ...batch[index],
+        anime: { ...batch[index].anime, bangumi_score: score },
+      });
+      if (accepted.length >= limit) return accepted;
+    }
+  }
+  return accepted;
 }
 
 function communityEntry(
