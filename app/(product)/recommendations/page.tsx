@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowCounterClockwise,
   CaretLeft,
   CaretRight,
   Faders,
@@ -43,6 +44,21 @@ const DEFAULT_MINIMUM_SCORE = 7;
 const YEAR_MIN = 2000;
 const YEAR_MAX = 2027;
 
+type RememberedFilterState = {
+  format: string;
+  minimumSupport: number;
+  filterRelated: boolean;
+  includeShortForm: boolean;
+  scoreFilterEnabled: boolean;
+  minimumScore: number;
+  yearFilterEnabled: boolean;
+  minimumYear: number;
+  maximumYear: number;
+};
+
+const FILTER_QUERY_KEYS = ["format", "support", "related", "short", "score", "year"];
+let rememberedFilterState: RememberedFilterState | null = null;
+
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum);
 }
@@ -50,6 +66,35 @@ function clamp(value: number, minimum: number, maximum: number) {
 function numericParam(value: string | null, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function initialFilterState(searchParams: URLSearchParams): RememberedFilterState {
+  const hasExplicitFilters = FILTER_QUERY_KEYS.some((key) => searchParams.has(key));
+  if (!hasExplicitFilters && rememberedFilterState) return rememberedFilterState;
+  const initialYear = (searchParams.get("year") ?? "").split("-");
+  return {
+    format: searchParams.get("format") || "全部",
+    minimumSupport: clamp(numericParam(searchParams.get("support"), 0), 0, 20),
+    filterRelated: searchParams.get("related") === "1",
+    includeShortForm: searchParams.get("short") !== "0",
+    scoreFilterEnabled: searchParams.has("score"),
+    minimumScore: clamp(
+      numericParam(searchParams.get("score"), DEFAULT_MINIMUM_SCORE),
+      SCORE_MIN,
+      SCORE_MAX,
+    ),
+    yearFilterEnabled: searchParams.has("year"),
+    minimumYear: clamp(
+      numericParam(initialYear[0] || null, YEAR_MIN),
+      YEAR_MIN,
+      YEAR_MAX,
+    ),
+    maximumYear: clamp(
+      numericParam(initialYear[1] || null, YEAR_MAX),
+      YEAR_MIN,
+      YEAR_MAX,
+    ),
+  };
 }
 
 function runMatchesFilters(filters: string | undefined, expected: object) {
@@ -80,37 +125,28 @@ export default function RecommendationsPage() {
   const requestedRun = Math.max(0, Number(searchParams.get("run")) || 0);
   const requestedPage = Math.max(1, Number(searchParams.get("page")) || 1);
   const restoredRun = useRef(0);
-  const initialYear = (searchParams.get("year") ?? "").split("-");
+  const initialFilters = useRef(initialFilterState(
+    new URLSearchParams(searchParams.toString()),
+  )).current;
   const [view, setView] = useState<"grid" | "list">(
     searchParams.get("view") === "list" ? "list" : "grid",
   );
-  const [format, setFormat] = useState(searchParams.get("format") || "全部");
-  const [minimum, setMinimum] = useState(
-    clamp(numericParam(searchParams.get("support"), 0), 0, 20),
-  );
+  const [format, setFormat] = useState(initialFilters.format);
+  const [minimum, setMinimum] = useState(initialFilters.minimumSupport);
   const [sort, setSort] = useState(searchParams.get("sort") || "推荐分数");
-  const [filterRelated, setFilterRelated] = useState(
-    searchParams.get("related") === "1",
-  );
-  const [includeShortForm, setIncludeShortForm] = useState(
-    searchParams.get("short") !== "0",
-  );
+  const [filterRelated, setFilterRelated] = useState(initialFilters.filterRelated);
+  const [includeShortForm, setIncludeShortForm] = useState(initialFilters.includeShortForm);
   const [scoreFilterEnabled, setScoreFilterEnabled] = useState(
-    searchParams.has("score"),
+    initialFilters.scoreFilterEnabled,
   );
-  const [minimumScore, setMinimumScore] = useState(
-    clamp(numericParam(searchParams.get("score"), DEFAULT_MINIMUM_SCORE), SCORE_MIN, SCORE_MAX),
-  );
+  const [minimumScore, setMinimumScore] = useState(initialFilters.minimumScore);
   const [yearFilterEnabled, setYearFilterEnabled] = useState(
-    searchParams.has("year"),
+    initialFilters.yearFilterEnabled,
   );
-  const [minimumYear, setMinimumYear] = useState(
-    clamp(numericParam(initialYear[0] || null, YEAR_MIN), YEAR_MIN, YEAR_MAX),
-  );
-  const [maximumYear, setMaximumYear] = useState(
-    clamp(numericParam(initialYear[1] || null, YEAR_MAX), YEAR_MIN, YEAR_MAX),
-  );
+  const [minimumYear, setMinimumYear] = useState(initialFilters.minimumYear);
+  const [maximumYear, setMaximumYear] = useState(initialFilters.maximumYear);
   const [currentPage, setCurrentPage] = useState(requestedPage);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<RecommendationFilters>(() => ({
     format,
     minimumSupport: minimum,
@@ -155,7 +191,12 @@ export default function RecommendationsPage() {
         const run = await loadRecommendationRun(requestedRun);
         if (run.profile_id !== profileId) throw new Error("推荐记录不属于当前资料");
         if (runMatchesFilters(run.filters, filterRecord)) {
-          return { items: run.items, runId: run.id, source: "api" as const };
+          return {
+            items: run.items,
+            runId: run.id,
+            source: "api" as const,
+            hasMore: run.has_more ?? run.items.length >= 100,
+          };
         }
       }
       return loadRecommendations(profileId!, appliedFilters);
@@ -186,6 +227,30 @@ export default function RecommendationsPage() {
   const yearEnd = ((maximumYear - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100;
 
   useEffect(() => {
+    rememberedFilterState = {
+      format,
+      minimumSupport: minimum,
+      filterRelated,
+      includeShortForm,
+      scoreFilterEnabled,
+      minimumScore,
+      yearFilterEnabled,
+      minimumYear,
+      maximumYear,
+    };
+  }, [
+    filterRelated,
+    format,
+    includeShortForm,
+    maximumYear,
+    minimum,
+    minimumScore,
+    minimumYear,
+    scoreFilterEnabled,
+    yearFilterEnabled,
+  ]);
+
+  useEffect(() => {
     if (!data?.runId || restoredRun.current === data.runId) return;
     restoredRun.current = data.runId;
     try {
@@ -202,18 +267,84 @@ export default function RecommendationsPage() {
     }
   }, [activePage, data?.runId, pageItems.length]);
 
-  const changePage = (page: number) => {
-    const nextPage = Math.max(1, Math.min(page, totalPages));
+  const changePage = (
+    page: number,
+    maximumPages = totalPages,
+    runId = data?.runId,
+  ) => {
+    const nextPage = Math.max(1, Math.min(page, maximumPages));
     setCurrentPage(nextPage);
     const query = new URLSearchParams(searchParams.toString());
     query.set("page", String(nextPage));
-    if (data?.runId) query.set("run", String(data.runId));
+    if (runId) query.set("run", String(runId));
     router.replace(`/recommendations?${query.toString()}`, { scroll: false });
     window.scrollTo({
       top: 0,
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
     });
   };
+
+  const pageGroupStart = Math.floor((activePage - 1) / 5) * 5 + 1;
+  const pageGroupEnd = Math.min(pageGroupStart + 4, totalPages);
+
+  async function openNextPageGroup() {
+    const targetPage = pageGroupEnd + 1;
+    if (targetPage <= totalPages) {
+      changePage(targetPage);
+      return;
+    }
+    if (!data?.hasMore || !profileId || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const refreshed = await loadRecommendations(profileId, appliedFilters, {
+        limit: data.items.length + 100,
+        runId: data.runId,
+      });
+      queryClient.setQueryData(recommendationsKey, refreshed);
+      const nextTotalPages = Math.max(1, Math.ceil(refreshed.items.length / PAGE_SIZE));
+      changePage(targetPage, nextTotalPages, refreshed.runId);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
+
+  function resetFilters() {
+    const defaults: RememberedFilterState = {
+      format: "全部",
+      minimumSupport: 0,
+      filterRelated: false,
+      includeShortForm: true,
+      scoreFilterEnabled: false,
+      minimumScore: DEFAULT_MINIMUM_SCORE,
+      yearFilterEnabled: false,
+      minimumYear: YEAR_MIN,
+      maximumYear: YEAR_MAX,
+    };
+    rememberedFilterState = defaults;
+    setFormat(defaults.format);
+    setMinimum(defaults.minimumSupport);
+    setFilterRelated(defaults.filterRelated);
+    setIncludeShortForm(defaults.includeShortForm);
+    setScoreFilterEnabled(defaults.scoreFilterEnabled);
+    setMinimumScore(defaults.minimumScore);
+    setYearFilterEnabled(defaults.yearFilterEnabled);
+    setMinimumYear(defaults.minimumYear);
+    setMaximumYear(defaults.maximumYear);
+    setCurrentPage(1);
+    setAppliedFilters({
+      format: defaults.format,
+      minimumSupport: defaults.minimumSupport,
+      minimumBangumiScore: null,
+      minimumYear: null,
+      maximumYear: null,
+      includeShortForm: defaults.includeShortForm,
+      excludeRelated: defaults.filterRelated,
+    });
+    replaceQuery((query) => {
+      FILTER_QUERY_KEYS.forEach((key) => query.delete(key));
+      query.delete("run");
+    });
+  }
 
   const rememberPosition = () => {
     if (!data?.runId) return;
@@ -264,7 +395,10 @@ export default function RecommendationsPage() {
       await sendRecommendationFeedback(data.runId, malId, action);
       if (action === "hide") {
         try {
-          const refreshed = await loadRecommendations(profileId!, appliedFilters);
+          const refreshed = await loadRecommendations(profileId!, appliedFilters, {
+            limit: data.items.length,
+            runId: data.runId,
+          });
           queryClient.setQueryData(recommendationsKey, refreshed);
         } catch (error) {
           if (profileId) {
@@ -341,7 +475,12 @@ export default function RecommendationsPage() {
               <Dialog.Content className="filter-drawer" aria-describedby={undefined}>
                 <div className="drawer-heading">
                   <Dialog.Title>筛选</Dialog.Title>
-                  <Dialog.Close className="button quiet">完成</Dialog.Close>
+                  <div className="drawer-heading-actions">
+                    <button className="button quiet" type="button" onClick={resetFilters}>
+                      <ArrowCounterClockwise size={17} /> 重置
+                    </button>
+                    <Dialog.Close className="button quiet">完成</Dialog.Close>
+                  </div>
                 </div>
                 <fieldset>
                   <legend>作品格式</legend>
@@ -607,9 +746,27 @@ export default function RecommendationsPage() {
                 <CaretLeft size={19} />
               </button>
               <div className="pagination-pages">
-                {recommendationPageItems(activePage, totalPages).map((item, index) => item === "ellipsis" ? (
-                  <span key={`ellipsis-${index}`} aria-hidden="true">···</span>
-                ) : (
+                {recommendationPageItems(activePage, totalPages, data?.hasMore).map((item) =>
+                  item === "previous" ? (
+                    <button
+                      type="button"
+                      key="previous-group"
+                      aria-label="前五页"
+                      onClick={() => changePage(Math.max(1, pageGroupStart - 5))}
+                    >
+                      ···
+                    </button>
+                  ) : item === "next" ? (
+                    <button
+                      type="button"
+                      key="next-group"
+                      aria-label="加载后五页"
+                      disabled={isLoadingMore}
+                      onClick={() => void openNextPageGroup()}
+                    >
+                      ···
+                    </button>
+                  ) : (
                   <button
                     type="button"
                     key={item}
@@ -620,9 +777,16 @@ export default function RecommendationsPage() {
                   >
                     {item}
                   </button>
-                ))}
+                  ))}
               </div>
-              <button type="button" aria-label="下一页" disabled={activePage === totalPages} onClick={() => changePage(activePage + 1)}>
+              <button
+                type="button"
+                aria-label="下一页"
+                disabled={(activePage === totalPages && !data?.hasMore) || isLoadingMore}
+                onClick={() => activePage < totalPages
+                  ? changePage(activePage + 1)
+                  : void openNextPageGroup()}
+              >
                 <CaretRight size={19} />
               </button>
             </nav>

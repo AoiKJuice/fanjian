@@ -400,6 +400,7 @@ kbd { padding: 2px 6px; background: var(--surface-muted); border: 1px solid var(
 .filter-drawer { position: fixed; z-index: 61; inset: 0 0 0 auto; width: min(430px, 100%); padding: 28px; background: var(--surface); box-shadow: -16px 0 40px rgba(0, 0, 0, .16); animation: drawer-in 200ms ease; overflow-y: auto; }
 .drawer-heading { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 18px; }
 .drawer-heading h2 { font-size: 1.45rem; }
+.drawer-heading-actions { display: flex; align-items: center; gap: 6px; }
 .filter-drawer fieldset { margin: 0; padding: 20px 0; border: 0; }
 .filter-drawer legend { margin-bottom: 13px; font-weight: 720; }
 .choice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }

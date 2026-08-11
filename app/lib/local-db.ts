@@ -309,6 +309,7 @@ export async function saveLocalRun(
   status: "ready" | "insufficient",
   items: Recommendation[],
   filters: object,
+  hasMore = false,
 ) {
   const created = now();
   const tx = await transaction("recommendation_runs", "readwrite");
@@ -320,6 +321,7 @@ export async function saveLocalRun(
     status,
     items,
     filters: JSON.stringify(filters),
+    has_more: hasMore,
   });
   const id = Number(await result(request));
   await completed(tx);
@@ -332,12 +334,33 @@ export async function saveLocalRun(
     status,
     items,
     filters: JSON.stringify(filters),
+    has_more: hasMore,
   } as RecommendationRun;
 }
 
 export async function loadLocalRun(runId: number) {
   const tx = await transaction("recommendation_runs", "readonly");
   return result(tx.objectStore("recommendation_runs").get(runId)) as Promise<StoredRun | undefined>;
+}
+
+export async function updateLocalRun(
+  runId: number,
+  items: Recommendation[],
+  filters: object,
+  hasMore: boolean,
+) {
+  const stored = await loadLocalRun(runId);
+  if (!stored) throw new Error("推荐记录不存在");
+  const updated = {
+    ...stored,
+    items,
+    filters: JSON.stringify(filters),
+    has_more: hasMore,
+  };
+  const tx = await transaction("recommendation_runs", "readwrite");
+  tx.objectStore("recommendation_runs").put(updated);
+  await completed(tx);
+  return updated as RecommendationRun;
 }
 
 export async function localRunHistory(profileId: number) {

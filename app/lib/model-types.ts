@@ -42,7 +42,9 @@ export type ModelRecommendationRequest = {
   ratings: Record<number, number>;
   excluded: number[];
   negativeItems: number[];
+  offset?: number;
   limit: number;
+  minimumAffinity?: number;
   minSupport: number;
   allowSequels: boolean;
   formats: string[];
@@ -57,6 +59,7 @@ export type ModelRecommendationResult = {
   items: Recommendation[];
   neighborCount: number;
   meanOverlap: number;
+  hasMore: boolean;
 };
 
 export type ModelWorkerRequest =

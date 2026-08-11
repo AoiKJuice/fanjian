@@ -127,6 +127,35 @@ type Neighbor = {
   overlap: number;
 };
 
+type RecommendationTarget = {
+  items: number[];
+  residuals: number[];
+};
+
+type RecommendationCandidate = {
+  item: number;
+  score: number;
+  affinity: number;
+  variance: number;
+  effectiveSample: number;
+};
+
+type RecommendationCore = {
+  key: string;
+  target: RecommendationTarget;
+  neighbors: Neighbor[];
+  candidates: RecommendationCandidate[];
+  support: Uint16Array;
+  distribution: Uint16Array[];
+  neighborTargetValues: Float32Array[];
+  neighborSupport: Uint32Array;
+  neighborWords: number;
+  profileSeries: Set<string>;
+  likedGenres: Map<string, number>;
+  meanOverlap: number;
+  materialized: Map<number, Recommendation>;
+};
+
 class Sha256 {
   private state = new Uint32Array([
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
@@ -499,6 +528,14 @@ class BrowserRecommender {
   private requiresContext!: Uint8Array;
   private globalMean = 0;
   private userCount = 0;
+  private neighborCache: {
+    key: string;
+    target: RecommendationTarget;
+    neighbors: Neighbor[];
+  } | null = null;
+  private neighborBuild: Promise<void> | null = null;
+  private recommendationCache: RecommendationCore | null = null;
+  private recommendationBuild: Promise<void> | null = null;
 
   async initialize(manifest: BrowserModelManifest) {
     const directory = await modelDirectory(false);
@@ -549,6 +586,10 @@ class BrowserRecommender {
         .then((file) => file.text()),
     );
     this.userCount = manifest.training_users;
+    this.neighborCache = null;
+    this.neighborBuild = null;
+    this.recommendationCache = null;
+    this.recommendationBuild = null;
   }
 
   search(query: string, limit: number, offset: number) {
@@ -580,7 +621,7 @@ class BrowserRecommender {
   }
 
   async neighborStats(ratings: Record<number, number>, negativeItems: number[]) {
-    const neighbors = await this.neighbors(ratings, new Set(negativeItems));
+    const { neighbors } = await this.neighborData(ratings, negativeItems);
     const catalogCounts = Array.from(this.itemCounts, Number)
       .filter((value) => value > 0)
       .sort((left, right) => left - right);
@@ -609,11 +650,138 @@ class BrowserRecommender {
   }
 
   async recommend(payload: ModelRecommendationRequest): Promise<ModelRecommendationResult> {
-    const target = this.target(payload.ratings);
-    const neighbors = await this.neighbors(payload.ratings, new Set(payload.negativeItems));
+    const core = await this.recommendationCoreFor(payload);
+    const neighbors = core.neighbors;
     if (!neighbors.length) {
-      return { items: [], neighborCount: 0, meanOverlap: 0 };
+      return { items: [], neighborCount: 0, meanOverlap: 0, hasMore: false };
     }
+    const excluded = new Set([
+      ...payload.excluded,
+      ...payload.negativeItems,
+      ...Object.keys(payload.ratings).map(Number),
+    ]);
+    const formats = new Set(payload.formats.map((value) => value.toUpperCase()));
+    const minimumAffinity = payload.minimumAffinity ?? 60;
+    const offset = Math.max(0, payload.offset ?? 0);
+    const limit = Math.max(1, payload.limit);
+    const selected: RecommendationCandidate[] = [];
+    const usedSeries = new Set<string>();
+    for (const candidate of core.candidates) {
+      const catalogItem = this.catalog[candidate.item];
+      const malId = this.malIds[candidate.item];
+      const rawBangumiScore = catalogItem.bangumi_score;
+      const bangumiScore = Number(rawBangumiScore);
+      const year = Number(catalogItem.year);
+      if (
+        candidate.affinity < minimumAffinity ||
+        core.support[candidate.item] < payload.minSupport ||
+        excluded.has(malId) ||
+        (formats.size && !formats.has(catalogItem.format.toUpperCase())) ||
+        (payload.minimumBangumiScore != null &&
+          (rawBangumiScore == null || !Number.isFinite(bangumiScore) ||
+            bangumiScore < payload.minimumBangumiScore)) ||
+        (payload.minimumYear != null &&
+          (!Number.isFinite(year) || year < payload.minimumYear)) ||
+        (payload.maximumYear != null &&
+          (!Number.isFinite(year) || year > payload.maximumYear)) ||
+        (payload.includeShortForm === false && shortFormAnimeIds.has(malId))
+      ) continue;
+      if (payload.excludeRelated && (
+        catalogItem.sequel ||
+        this.inferredContinuation[candidate.item] ||
+        this.requiresContext[candidate.item] ||
+        this.ancillary[candidate.item] ||
+        nonPrimaryAnimeIds.has(malId)
+      )) continue;
+      if (!payload.allowSequels) {
+        if (catalogItem.sequel || this.inferredContinuation[candidate.item]) continue;
+        if (this.requiresContext[candidate.item] &&
+          !core.profileSeries.has(this.seriesKeys[candidate.item])) continue;
+      }
+      const series = this.seriesKeys[candidate.item];
+      if (series && usedSeries.has(series)) continue;
+      selected.push(candidate);
+      if (series) usedSeries.add(series);
+      if (selected.length > offset + limit) break;
+    }
+    const page = selected.slice(offset, offset + limit);
+    const items = page.map((candidate) => this.materializeRecommendation(
+      core,
+      candidate,
+      payload.ratings,
+    ));
+    return {
+      items,
+      neighborCount: neighbors.length,
+      meanOverlap: core.meanOverlap,
+      hasMore: selected.length > offset + limit,
+    };
+  }
+
+  private recommendationInputKey(
+    ratings: Record<number, number>,
+    negativeItems: number[],
+  ) {
+    return JSON.stringify([
+      Object.entries(ratings).sort((left, right) => Number(left[0]) - Number(right[0])),
+      [...negativeItems].sort((left, right) => left - right),
+    ]);
+  }
+
+  private async neighborData(
+    ratings: Record<number, number>,
+    negativeItems: number[],
+  ) {
+    const key = this.recommendationInputKey(ratings, negativeItems);
+    if (this.neighborCache?.key === key) return this.neighborCache;
+    while (this.neighborBuild) await this.neighborBuild;
+    if (this.neighborCache?.key === key) return this.neighborCache;
+    let releaseBuild = () => undefined;
+    const build = new Promise<void>((resolve) => {
+      releaseBuild = resolve;
+    });
+    this.neighborBuild = build;
+    try {
+      const target = this.target(ratings);
+      const neighbors = await this.neighbors(ratings, new Set(negativeItems));
+      this.neighborCache = { key, target, neighbors };
+      return this.neighborCache;
+    } finally {
+      if (this.neighborBuild === build) this.neighborBuild = null;
+      releaseBuild();
+    }
+  }
+
+  private async recommendationCoreFor(
+    payload: ModelRecommendationRequest,
+  ): Promise<RecommendationCore> {
+    const requestedKey = this.recommendationInputKey(
+      payload.ratings,
+      payload.negativeItems,
+    );
+    if (this.recommendationCache?.key === requestedKey) return this.recommendationCache;
+    while (this.recommendationBuild) await this.recommendationBuild;
+    if (this.recommendationCache?.key === requestedKey) return this.recommendationCache;
+    let releaseBuild = () => undefined;
+    const build = new Promise<void>((resolve) => {
+      releaseBuild = resolve;
+    });
+    this.recommendationBuild = build;
+    try {
+      return await this.buildRecommendationCore(payload);
+    } finally {
+      if (this.recommendationBuild === build) this.recommendationBuild = null;
+      releaseBuild();
+    }
+  }
+
+  private async buildRecommendationCore(
+    payload: ModelRecommendationRequest,
+  ): Promise<RecommendationCore> {
+    const { key, target, neighbors } = await this.neighborData(
+      payload.ratings,
+      payload.negativeItems,
+    );
     const itemCount = this.malIds.length;
     const weightedSum = new Float64Array(itemCount);
     const weightSum = new Float64Array(itemCount);
@@ -626,6 +794,8 @@ class BrowserRecommender {
       { length: neighbors.length },
       () => new Float32Array(target.items.length).fill(Number.NaN),
     );
+    const neighborWords = Math.max(1, Math.ceil(neighbors.length / 32));
+    const neighborSupport = new Uint32Array(itemCount * neighborWords);
     const targetPositions = new Map(target.items.map((item, index) => [item, index]));
 
     for (let neighborPosition = 0; neighborPosition < neighbors.length; neighborPosition++) {
@@ -649,54 +819,20 @@ class BrowserRecommender {
         weightedRawRatingSum[item] += similarity * raw;
         support[item]++;
         distribution[raw <= 4 ? 0 : raw <= 6 ? 1 : raw <= 8 ? 2 : 3][item]++;
+        neighborSupport[item * neighborWords + (neighborPosition >>> 5)] |=
+          1 << (neighborPosition & 31);
         const targetPosition = targetPositions.get(item);
         if (targetPosition != null) neighborTargetValues[neighborPosition][targetPosition] = value;
       }
     }
 
-    const excluded = new Set([
-      ...payload.excluded,
-      ...payload.negativeItems,
-      ...Object.keys(payload.ratings).map(Number),
-    ]);
     const profileSeries = new Set(target.items.map((item) => this.seriesKeys[item]));
-    const candidates: Array<{
-      item: number;
-      score: number;
-      variance: number;
-      effectiveSample: number;
-    }> = [];
-    const formats = new Set(payload.formats.map((value) => value.toUpperCase()));
+    const candidates: RecommendationCandidate[] = [];
     for (let item = 0; item < itemCount; item++) {
-      const catalogItem = this.catalog[item];
-      const malId = this.malIds[item];
-      const bangumiScore = Number(catalogItem.bangumi_score);
-      const year = Number(catalogItem.year);
       if (
-        support[item] < payload.minSupport ||
         weightSum[item] <= 0 ||
-        numberAt(this.itemCounts, item) < 20 ||
-        excluded.has(malId) ||
-        (formats.size && !formats.has(catalogItem.format.toUpperCase())) ||
-        (payload.minimumBangumiScore != null &&
-          (!Number.isFinite(bangumiScore) || bangumiScore < payload.minimumBangumiScore)) ||
-        (payload.minimumYear != null &&
-          (!Number.isFinite(year) || year < payload.minimumYear)) ||
-        (payload.maximumYear != null &&
-          (!Number.isFinite(year) || year > payload.maximumYear)) ||
-        (payload.includeShortForm === false && shortFormAnimeIds.has(malId))
+        numberAt(this.itemCounts, item) < 20
       ) continue;
-      if (payload.excludeRelated && (
-        catalogItem.sequel ||
-        this.inferredContinuation[item] ||
-        this.requiresContext[item] ||
-        this.ancillary[item] ||
-        nonPrimaryAnimeIds.has(malId)
-      )) continue;
-      if (!payload.allowSequels) {
-        if (catalogItem.sequel || this.inferredContinuation[item]) continue;
-        if (this.requiresContext[item] && !profileSeries.has(this.seriesKeys[item])) continue;
-      }
       const estimate = weightedSum[item] / weightSum[item];
       const variance = Math.max(weightedSquareSum[item] / weightSum[item] - estimate ** 2, 0);
       const effectiveSample = weightSum[item] ** 2 / Math.max(squaredWeightSum[item], 1e-12);
@@ -707,42 +843,65 @@ class BrowserRecommender {
       let score = estimate * reliability - 0.5 * Math.sqrt(variance / effectiveSample)
         + 0.75 * absolutePreference;
       if (this.ancillary[item]) score -= 0.45;
-      candidates.push({ item, score, variance, effectiveSample });
+      candidates.push({
+        item,
+        score,
+        affinity: clamp(Math.round(50 + 32 * Math.tanh(score)), 1, 95),
+        variance,
+        effectiveSample,
+      });
     }
     candidates.sort((left, right) => right.score - left.score);
-    const selected: typeof candidates = [];
-    const usedSeries = new Set<string>();
-    for (const candidate of candidates) {
-      const key = this.seriesKeys[candidate.item];
-      if (key && usedSeries.has(key)) continue;
-      selected.push(candidate);
-      if (key) usedSeries.add(key);
-      if (selected.length >= payload.limit) break;
-    }
-    const likedGenres = this.likedGenres(payload.ratings);
-    const output: Recommendation[] = [];
-    for (const candidate of selected) {
-      const item = candidate.item;
-      const supporting = await Promise.all(neighbors.map(async (neighbor) => {
-        const start = Number(this.csrIndptr[neighbor.userIdx]);
-        const stop = Number(this.csrIndptr[neighbor.userIdx + 1]);
-        const row = await this.csrIndices.read(start, stop) as Int32Array;
-        return binarySearch(row, item);
-      }));
-      const evidence = this.evidence(
-        payload.ratings,
-        target,
-        neighbors,
-        neighborTargetValues,
-        supporting,
-      );
-      const itemSupport = support[item];
-      const anime = publicAnime(this.catalog[item]);
-      anime.matched_tags = this.matchedTags(item, likedGenres);
-      output.push({
+    this.recommendationCache = {
+      key,
+      target,
+      neighbors,
+      candidates,
+      support,
+      distribution,
+      neighborTargetValues,
+      neighborSupport,
+      neighborWords,
+      profileSeries,
+      likedGenres: this.likedGenres(payload.ratings),
+      meanOverlap: neighbors.length
+        ? round(
+            neighbors.reduce((sum, neighbor) => sum + neighbor.overlap, 0) /
+              neighbors.length,
+            2,
+          )
+        : 0,
+      materialized: new Map(),
+    };
+    return this.recommendationCache;
+  }
+
+  private materializeRecommendation(
+    core: RecommendationCore,
+    candidate: RecommendationCandidate,
+    ratings: Record<number, number>,
+  ) {
+    const cached = core.materialized.get(candidate.item);
+    if (cached) return cached;
+    const item = candidate.item;
+    const supporting = core.neighbors.map((_, neighborPosition) => Boolean(
+      core.neighborSupport[item * core.neighborWords + (neighborPosition >>> 5)] &
+      (1 << (neighborPosition & 31)),
+    ));
+    const evidence = this.evidence(
+      ratings,
+      core.target,
+      core.neighbors,
+      core.neighborTargetValues,
+      supporting,
+    );
+    const itemSupport = core.support[item];
+    const anime = publicAnime(this.catalog[item]);
+    anime.matched_tags = this.matchedTags(item, core.likedGenres);
+    const recommendation: Recommendation = {
         anime,
         rank_score: round(candidate.score, 6),
-        affinity: clamp(Math.round(50 + 32 * Math.tanh(candidate.score)), 1, 95),
+        affinity: candidate.affinity,
         confidence:
           itemSupport >= 20 && candidate.effectiveSample >= 12 &&
           candidate.variance <= 0.8 && !this.ancillary[item]
@@ -755,10 +914,10 @@ class BrowserRecommender {
           : `${itemSupport} 名相似用户支持本次推荐。`,
         evidence,
         neighbor_distribution: {
-          "1-4": distribution[0][item],
-          "5-6": distribution[1][item],
-          "7-8": distribution[2][item],
-          "9-10": distribution[3][item],
+          "1-4": core.distribution[0][item],
+          "5-6": core.distribution[1][item],
+          "7-8": core.distribution[2][item],
+          "9-10": core.distribution[3][item],
         },
         risk: this.ancillary[item]
           ? "属于系列附属内容，已降低排序权重。"
@@ -770,16 +929,9 @@ class BrowserRecommender {
         relation_notice: this.catalog[item].sequel
           ? "该作品被标记为续作，请确认已完成前作。"
           : null,
-      });
-    }
-    return {
-      items: output,
-      neighborCount: neighbors.length,
-      meanOverlap: round(
-        neighbors.reduce((sum, neighbor) => sum + neighbor.overlap, 0) / neighbors.length,
-        2,
-      ),
     };
+    core.materialized.set(item, recommendation);
+    return recommendation;
   }
 
   private target(ratings: Record<number, number>) {
@@ -1152,18 +1304,6 @@ function seriesBalance(keys: string[]) {
   const counts = new Map<string, number>();
   keys.forEach((key) => counts.set(key, (counts.get(key) ?? 0) + 1));
   return keys.map((key) => Math.fround(1 / Math.sqrt(counts.get(key) ?? 1)));
-}
-
-function binarySearch(values: Int32Array, target: number) {
-  let left = 0;
-  let right = values.length - 1;
-  while (left <= right) {
-    const middle = (left + right) >>> 1;
-    if (values[middle] === target) return true;
-    if (values[middle] < target) left = middle + 1;
-    else right = middle - 1;
-  }
-  return false;
 }
 
 function upperBound(values: number[], target: number) {
