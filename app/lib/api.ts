@@ -1,4 +1,5 @@
 import type { Anime, Recommendation } from "./data";
+import { enrichBrowserRecommendations } from "./anime-metadata";
 import { browserModelEnabled } from "./browser-mode";
 import {
   importAniListInBrowser,
@@ -472,7 +473,10 @@ export async function loadRecommendationRun(
   if (browserModelEnabled) {
     const run = await loadLocalRun(runId);
     if (!run) throw new Error("推荐记录不存在");
-    return run;
+    return {
+      ...run,
+      items: enrichBrowserRecommendations(run.items),
+    };
   }
   return requestJson<RecommendationRun>(`/recommendations/${runId}`);
 }
@@ -523,7 +527,11 @@ export async function loadRecommendations(
       result.items,
       { limit: 100, min_support: 5, allow_sequels: true, formats: [] },
     );
-    return { items: run.items, runId: run.id, source: "api" };
+    return {
+      items: enrichBrowserRecommendations(run.items),
+      runId: run.id,
+      source: "api",
+    };
   }
   const payload = await requestJson<{
     id: number;

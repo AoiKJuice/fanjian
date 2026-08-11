@@ -10,6 +10,7 @@ import { AnimeCover } from "../app/components/anime-cover";
 import { RecommendationCard } from "../app/components/recommendation-card";
 import { Confidence, StatePanel } from "../app/components/ui";
 import { useBangumiAnime } from "../app/lib/bangumi-client";
+import { enrichBrowserAnime } from "../app/lib/anime-metadata";
 import type { Anime, Recommendation } from "../app/lib/data";
 import { recommendationPageItems } from "../app/lib/pagination";
 
@@ -57,6 +58,20 @@ afterEach(() => {
 });
 
 describe("shared interface components", () => {
+  it("enriches stored recommendations with relation and duration metadata", () => {
+    const derivative = enrichBrowserAnime({
+      ...recommendation.anime,
+      mal_id: 17637,
+    });
+    const primary = enrichBrowserAnime({
+      ...recommendation.anime,
+      mal_id: 1887,
+    });
+    expect(derivative.is_derivative).toBe(true);
+    expect(derivative.is_short_form).toBe(true);
+    expect(primary.is_derivative).toBe(false);
+  });
+
   it("allows detail pages to render before anime data is available", () => {
     render(<BangumiProbe />);
     expect(screen.getByText("等待作品数据")).toBeVisible();

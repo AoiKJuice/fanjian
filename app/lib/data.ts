@@ -15,6 +15,7 @@ export type Anime = {
   matched_tags?: string[];
   is_sequel?: boolean;
   is_derivative?: boolean;
+  is_short_form?: boolean;
 };
 
 export type Evidence = {

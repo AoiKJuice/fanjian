@@ -217,6 +217,7 @@ def test_continuation_and_ancillary_detection():
     assert continuation("Example Season 2")
     assert continuation("Hidamari Sketch x 365")
     assert not continuation("One Punch Man")
+    assert not continuation("Suki tte Ii na yo.")
     assert ancillary("OVA", "Example")
     assert ancillary("TV", "Example Recap")
     assert not ancillary("TV", "Example")
