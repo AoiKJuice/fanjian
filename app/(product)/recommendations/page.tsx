@@ -13,6 +13,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   type CSSProperties,
+  type SyntheticEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -39,8 +40,8 @@ const RETURN_STATE_KEY = "fanjian-recommendations-return";
 const SCORE_MIN = 0;
 const SCORE_MAX = 10;
 const DEFAULT_MINIMUM_SCORE = 7;
-const YEAR_MIN = 1917;
-const YEAR_MAX = new Date().getFullYear() + 2;
+const YEAR_MIN = 2000;
+const YEAR_MAX = 2027;
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum);
@@ -49,15 +50,6 @@ function clamp(value: number, minimum: number, maximum: number) {
 function numericParam(value: string | null, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function useDebouncedValue<T>(value: T, delay: number) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebounced(value), delay);
-    return () => window.clearTimeout(timer);
-  }, [delay, value]);
-  return debounced;
 }
 
 function runMatchesFilters(filters: string | undefined, expected: object) {
@@ -119,8 +111,7 @@ export default function RecommendationsPage() {
     clamp(numericParam(initialYear[1] || null, YEAR_MAX), YEAR_MIN, YEAR_MAX),
   );
   const [currentPage, setCurrentPage] = useState(requestedPage);
-
-  const draftFilters = useMemo<RecommendationFilters>(() => ({
+  const [appliedFilters, setAppliedFilters] = useState<RecommendationFilters>(() => ({
     format,
     minimumSupport: minimum,
     minimumBangumiScore: scoreFilterEnabled ? minimumScore : null,
@@ -128,18 +119,7 @@ export default function RecommendationsPage() {
     maximumYear: yearFilterEnabled ? maximumYear : null,
     includeShortForm,
     excludeRelated: filterRelated,
-  }), [
-    filterRelated,
-    format,
-    includeShortForm,
-    maximumYear,
-    minimum,
-    minimumScore,
-    minimumYear,
-    scoreFilterEnabled,
-    yearFilterEnabled,
-  ]);
-  const appliedFilters = useDebouncedValue(draftFilters, 280);
+  }));
   const filterRecord = useMemo(
     () => recommendationFilterRecord(appliedFilters),
     [appliedFilters],
@@ -181,7 +161,6 @@ export default function RecommendationsPage() {
       return loadRecommendations(profileId!, appliedFilters);
     },
     enabled: Boolean(profileId && profile.rating_count >= 5),
-    placeholderData: (previous) => previous,
   });
   const { data, isError, isPending } = recommendationsQuery;
   const recommendations = useMemo(() => data?.items ?? [], [data?.items]);
@@ -244,6 +223,40 @@ export default function RecommendationsPage() {
       scrollY: window.scrollY,
     }));
   };
+
+  function applyMinimumScore(event: SyntheticEvent<HTMLInputElement>) {
+    const value = Number(event.currentTarget.value);
+    setAppliedFilters((current) => ({
+      ...current,
+      minimumBangumiScore: value,
+    }));
+  }
+
+  function applyMinimumYear(event: SyntheticEvent<HTMLInputElement>) {
+    const value = Math.min(Number(event.currentTarget.value), maximumYear);
+    setAppliedFilters((current) => ({
+      ...current,
+      minimumYear: value,
+      maximumYear,
+    }));
+  }
+
+  function applyMaximumYear(event: SyntheticEvent<HTMLInputElement>) {
+    const value = Math.max(Number(event.currentTarget.value), minimumYear);
+    setAppliedFilters((current) => ({
+      ...current,
+      minimumYear,
+      maximumYear: value,
+    }));
+  }
+
+  function applyMinimumSupport(event: SyntheticEvent<HTMLInputElement>) {
+    const value = Number(event.currentTarget.value);
+    setAppliedFilters((current) => ({
+      ...current,
+      minimumSupport: value,
+    }));
+  }
 
   const handleFeedback = useCallback(
     async (action: "favorite" | "hide", malId: number) => {
@@ -347,6 +360,10 @@ export default function RecommendationsPage() {
                         onClick={() => {
                           setFormat(option.value);
                           setCurrentPage(1);
+                          setAppliedFilters((current) => ({
+                            ...current,
+                            format: option.value,
+                          }));
                           replaceQuery((query) => {
                             if (option.value === "全部") query.delete("format");
                             else query.set("format", option.value);
@@ -368,6 +385,10 @@ export default function RecommendationsPage() {
                         const enabled = event.target.checked;
                         setScoreFilterEnabled(enabled);
                         setCurrentPage(1);
+                        setAppliedFilters((current) => ({
+                          ...current,
+                          minimumBangumiScore: enabled ? minimumScore : null,
+                        }));
                         replaceQuery((query) => {
                           if (enabled) query.set("score", minimumScore.toFixed(1));
                           else query.delete("score");
@@ -396,6 +417,9 @@ export default function RecommendationsPage() {
                           setCurrentPage(1);
                           replaceQuery((query) => query.set("score", value.toFixed(1)));
                         }}
+                        onPointerUp={applyMinimumScore}
+                        onKeyUp={applyMinimumScore}
+                        onBlur={applyMinimumScore}
                       />
                     </div>
                   )}
@@ -410,6 +434,11 @@ export default function RecommendationsPage() {
                         const enabled = event.target.checked;
                         setYearFilterEnabled(enabled);
                         setCurrentPage(1);
+                        setAppliedFilters((current) => ({
+                          ...current,
+                          minimumYear: enabled ? minimumYear : null,
+                          maximumYear: enabled ? maximumYear : null,
+                        }));
                         replaceQuery((query) => {
                           if (enabled) query.set("year", `${minimumYear}-${maximumYear}`);
                           else query.delete("year");
@@ -446,6 +475,9 @@ export default function RecommendationsPage() {
                             setCurrentPage(1);
                             replaceQuery((query) => query.set("year", `${value}-${maximumYear}`));
                           }}
+                          onPointerUp={applyMinimumYear}
+                          onKeyUp={applyMinimumYear}
+                          onBlur={applyMinimumYear}
                         />
                         <input
                           aria-label="最晚发行年份"
@@ -460,6 +492,9 @@ export default function RecommendationsPage() {
                             setCurrentPage(1);
                             replaceQuery((query) => query.set("year", `${minimumYear}-${value}`));
                           }}
+                          onPointerUp={applyMaximumYear}
+                          onKeyUp={applyMaximumYear}
+                          onBlur={applyMaximumYear}
                         />
                       </div>
                     </div>
@@ -486,6 +521,9 @@ export default function RecommendationsPage() {
                         else query.delete("support");
                       });
                     }}
+                    onPointerUp={applyMinimumSupport}
+                    onKeyUp={applyMinimumSupport}
+                    onBlur={applyMinimumSupport}
                   />
                 </fieldset>
                 <fieldset className="filter-toggle-group">
@@ -498,6 +536,10 @@ export default function RecommendationsPage() {
                         const checked = event.target.checked;
                         setIncludeShortForm(checked);
                         setCurrentPage(1);
+                        setAppliedFilters((current) => ({
+                          ...current,
+                          includeShortForm: checked,
+                        }));
                         replaceQuery((query) => {
                           if (checked) query.delete("short");
                           else query.set("short", "0");
@@ -515,6 +557,10 @@ export default function RecommendationsPage() {
                         const checked = event.target.checked;
                         setFilterRelated(checked);
                         setCurrentPage(1);
+                        setAppliedFilters((current) => ({
+                          ...current,
+                          excludeRelated: checked,
+                        }));
                         replaceQuery((query) => {
                           if (checked) query.set("related", "1");
                           else query.delete("related");
