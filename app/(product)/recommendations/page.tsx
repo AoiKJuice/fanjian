@@ -11,15 +11,23 @@ import {
 import { Dialog } from "radix-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { RecommendationCard } from "../../components/recommendation-card";
 import { ThemeSelect } from "../../components/theme-select";
 import { StatePanel } from "../../components/ui";
-import { loadBangumiMetadataMany } from "../../lib/bangumi-client";
 import {
   loadRecommendations,
   loadRecommendationRun,
   loadProfiles,
+  recommendationFilterRecord,
+  type RecommendationFilters,
   removeCollectionItem,
   sendRecommendationFeedback,
 } from "../../lib/api";
@@ -30,7 +38,48 @@ const PAGE_SIZE = 20;
 const RETURN_STATE_KEY = "fanjian-recommendations-return";
 const SCORE_MIN = 0;
 const SCORE_MAX = 10;
-const CURRENT_YEAR = new Date().getFullYear();
+const DEFAULT_MINIMUM_SCORE = 7;
+const YEAR_MIN = 1917;
+const YEAR_MAX = new Date().getFullYear() + 2;
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function numericParam(value: string | null, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function useDebouncedValue<T>(value: T, delay: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [delay, value]);
+  return debounced;
+}
+
+function runMatchesFilters(filters: string | undefined, expected: object) {
+  if (!filters) return false;
+  try {
+    const saved = JSON.parse(filters) as Record<string, unknown>;
+    const normalized = {
+      limit: Number(saved.limit) || 100,
+      min_support: Number(saved.min_support) || 5,
+      allow_sequels: saved.allow_sequels !== false,
+      formats: Array.isArray(saved.formats) ? saved.formats : [],
+      minimum_bangumi_score: saved.minimum_bangumi_score ?? null,
+      minimum_year: saved.minimum_year ?? null,
+      maximum_year: saved.maximum_year ?? null,
+      include_short_form: saved.include_short_form !== false,
+      exclude_related: saved.exclude_related === true,
+    };
+    return JSON.stringify(normalized) === JSON.stringify(expected);
+  } catch {
+    return false;
+  }
+}
 
 export default function RecommendationsPage() {
   const queryClient = useQueryClient();
@@ -39,100 +88,112 @@ export default function RecommendationsPage() {
   const requestedRun = Math.max(0, Number(searchParams.get("run")) || 0);
   const requestedPage = Math.max(1, Number(searchParams.get("page")) || 1);
   const restoredRun = useRef(0);
-  const [view, setView] = useState<"grid" | "list">("grid");
-  const [format, setFormat] = useState("全部");
-  const [minimum, setMinimum] = useState(0);
-  const [sort, setSort] = useState("推荐分数");
-  const [filterRelated, setFilterRelated] = useState(false);
-  const [includeShortForm, setIncludeShortForm] = useState(true);
-  const [minimumScore, setMinimumScore] = useState(SCORE_MIN);
-  const [maximumScore, setMaximumScore] = useState(SCORE_MAX);
-  const [minimumYear, setMinimumYear] = useState(0);
-  const [maximumYear, setMaximumYear] = useState(0);
+  const initialYear = (searchParams.get("year") ?? "").split("-");
+  const [view, setView] = useState<"grid" | "list">(
+    searchParams.get("view") === "list" ? "list" : "grid",
+  );
+  const [format, setFormat] = useState(searchParams.get("format") || "全部");
+  const [minimum, setMinimum] = useState(
+    clamp(numericParam(searchParams.get("support"), 0), 0, 20),
+  );
+  const [sort, setSort] = useState(searchParams.get("sort") || "推荐分数");
+  const [filterRelated, setFilterRelated] = useState(
+    searchParams.get("related") === "1",
+  );
+  const [includeShortForm, setIncludeShortForm] = useState(
+    searchParams.get("short") !== "0",
+  );
+  const [scoreFilterEnabled, setScoreFilterEnabled] = useState(
+    searchParams.has("score"),
+  );
+  const [minimumScore, setMinimumScore] = useState(
+    clamp(numericParam(searchParams.get("score"), DEFAULT_MINIMUM_SCORE), SCORE_MIN, SCORE_MAX),
+  );
+  const [yearFilterEnabled, setYearFilterEnabled] = useState(
+    searchParams.has("year"),
+  );
+  const [minimumYear, setMinimumYear] = useState(
+    clamp(numericParam(initialYear[0] || null, YEAR_MIN), YEAR_MIN, YEAR_MAX),
+  );
+  const [maximumYear, setMaximumYear] = useState(
+    clamp(numericParam(initialYear[1] || null, YEAR_MAX), YEAR_MIN, YEAR_MAX),
+  );
   const [currentPage, setCurrentPage] = useState(requestedPage);
+
+  const draftFilters = useMemo<RecommendationFilters>(() => ({
+    format,
+    minimumSupport: minimum,
+    minimumBangumiScore: scoreFilterEnabled ? minimumScore : null,
+    minimumYear: yearFilterEnabled ? minimumYear : null,
+    maximumYear: yearFilterEnabled ? maximumYear : null,
+    includeShortForm,
+    excludeRelated: filterRelated,
+  }), [
+    filterRelated,
+    format,
+    includeShortForm,
+    maximumYear,
+    minimum,
+    minimumScore,
+    minimumYear,
+    scoreFilterEnabled,
+    yearFilterEnabled,
+  ]);
+  const appliedFilters = useDebouncedValue(draftFilters, 280);
+  const filterRecord = useMemo(
+    () => recommendationFilterRecord(appliedFilters),
+    [appliedFilters],
+  );
+  const filterKey = JSON.stringify(filterRecord);
+
+  const replaceQuery = useCallback((
+    update: (query: URLSearchParams) => void,
+    resetPage = true,
+  ) => {
+    const query = new URLSearchParams(searchParams.toString());
+    if (resetPage) query.set("page", "1");
+    update(query);
+    router.replace(`/recommendations?${query.toString()}`, { scroll: false });
+  }, [router, searchParams]);
+
   const profilesQuery = useQuery({
     queryKey: ["profiles"],
     queryFn: loadProfiles,
   });
   const profile = useActiveProfile(profilesQuery.data);
   const profileId = profile?.id;
+  const recommendationsKey = useMemo(() => [
+    "recommendations",
+    profileId,
+    requestedRun || "new",
+    filterKey,
+  ] as const, [filterKey, profileId, requestedRun]);
   const recommendationsQuery = useQuery({
-    queryKey: ["recommendations", profileId, requestedRun || "new"],
+    queryKey: recommendationsKey,
     queryFn: async () => {
-      if (!requestedRun) return loadRecommendations(profileId!);
-      const run = await loadRecommendationRun(requestedRun);
-      if (run.profile_id !== profileId) throw new Error("推荐记录不属于当前资料");
-      return { items: run.items, runId: run.id, source: "api" as const };
+      if (requestedRun) {
+        const run = await loadRecommendationRun(requestedRun);
+        if (run.profile_id !== profileId) throw new Error("推荐记录不属于当前资料");
+        if (runMatchesFilters(run.filters, filterRecord)) {
+          return { items: run.items, runId: run.id, source: "api" as const };
+        }
+      }
+      return loadRecommendations(profileId!, appliedFilters);
     },
     enabled: Boolean(profileId && profile.rating_count >= 5),
+    placeholderData: (previous) => previous,
   });
   const { data, isError, isPending } = recommendationsQuery;
   const recommendations = useMemo(() => data?.items ?? [], [data?.items]);
-  const yearBounds = useMemo(() => {
-    const years = recommendations
-      .map((item) => item.anime.year)
-      .filter((year) => year > 1900);
-    return {
-      minimum: years.length ? Math.min(...years) : 1900,
-      maximum: years.length ? Math.max(...years) : CURRENT_YEAR,
-    };
-  }, [recommendations]);
-  const selectedMinimumYear = Math.min(
-    Math.max(minimumYear || yearBounds.minimum, yearBounds.minimum),
-    yearBounds.maximum,
-  );
-  const selectedMaximumYear = Math.max(
-    Math.min(maximumYear || yearBounds.maximum, yearBounds.maximum),
-    yearBounds.minimum,
-  );
-  const scoreFilterActive = minimumScore > SCORE_MIN || maximumScore < SCORE_MAX;
-  const yearFilterActive = minimumYear > 0 || maximumYear > 0;
-  const bangumiScoresQuery = useQuery({
-    queryKey: ["bangumi-filter-scores", data?.runId],
-    queryFn: () => loadBangumiMetadataMany(
-      recommendations.map((item) => item.anime.mal_id),
-    ),
-    enabled: scoreFilterActive && recommendations.length > 0,
-  });
   const filtered = useMemo(() => {
-    const items = recommendations.filter(
-      (item) => {
-        const metadata = bangumiScoresQuery.data?.get(item.anime.mal_id);
-        const score = metadata?.score ?? item.anime.bangumi_score ?? null;
-        const scoreMatches = !scoreFilterActive
-          || !bangumiScoresQuery.data
-          || (score !== null && score >= minimumScore && score <= maximumScore);
-        const yearMatches = !yearFilterActive
-          || (item.anime.year >= selectedMinimumYear
-            && item.anime.year <= selectedMaximumYear);
-        return (
-          (format === "全部" || item.anime.format === format)
-          && item.support >= minimum
-          && scoreMatches
-          && yearMatches
-          && (includeShortForm || !item.anime.is_short_form)
-          && (!filterRelated || (!item.anime.is_sequel && !item.anime.is_derivative))
-        );
-      },
-    );
-    if (sort === "年份") return [...items].sort((a, b) => b.anime.year - a.anime.year);
-    if (sort === "支持人数") return [...items].sort((a, b) => b.support - a.support);
-    return items;
-  }, [
-    bangumiScoresQuery.data,
-    filterRelated,
-    format,
-    includeShortForm,
-    maximumScore,
-    minimum,
-    minimumScore,
-    recommendations,
-    scoreFilterActive,
-    selectedMaximumYear,
-    selectedMinimumYear,
-    sort,
-    yearFilterActive,
-  ]);
+    if (sort === "年份") {
+      return [...recommendations].sort((left, right) => right.anime.year - left.anime.year);
+    }
+    if (sort === "支持人数") {
+      return [...recommendations].sort((left, right) => right.support - left.support);
+    }
+    return recommendations;
+  }, [recommendations, sort]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const activePage = Math.min(currentPage, totalPages);
   const pageItems = filtered.slice((activePage - 1) * PAGE_SIZE, activePage * PAGE_SIZE);
@@ -140,8 +201,10 @@ export default function RecommendationsPage() {
     + Number(minimum > 0)
     + Number(filterRelated)
     + Number(!includeShortForm)
-    + Number(scoreFilterActive)
-    + Number(yearFilterActive);
+    + Number(scoreFilterEnabled)
+    + Number(yearFilterEnabled);
+  const yearStart = ((minimumYear - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100;
+  const yearEnd = ((maximumYear - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100;
 
   useEffect(() => {
     if (!data?.runId || restoredRun.current === data.runId) return;
@@ -187,39 +250,50 @@ export default function RecommendationsPage() {
       if (!data) return;
       await sendRecommendationFeedback(data.runId, malId, action);
       if (action === "hide") {
-        const refreshed = await recommendationsQuery.refetch();
-        if (refreshed.error) {
+        try {
+          const refreshed = await loadRecommendations(profileId!, appliedFilters);
+          queryClient.setQueryData(recommendationsKey, refreshed);
+        } catch (error) {
           if (profileId) {
-            await removeCollectionItem(
-              profileId,
-              "hidden",
-              malId,
-            ).catch(() => undefined);
+            await removeCollectionItem(profileId, "hidden", malId).catch(() => undefined);
           }
-          throw refreshed.error;
+          throw error;
         }
       }
-      void queryClient.invalidateQueries({
-        queryKey: ["profile-collections", profileId],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ["dashboard-recommendations", profileId],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ["recommendation-history", profileId],
-      });
+      void queryClient.invalidateQueries({ queryKey: ["profile-collections", profileId] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard-recommendations", profileId] });
+      void queryClient.invalidateQueries({ queryKey: ["recommendation-history", profileId] });
     },
-    [data, profileId, queryClient, recommendationsQuery],
+    [appliedFilters, data, profileId, queryClient, recommendationsKey],
   );
+
+  const detailParams = new URLSearchParams(searchParams.toString());
+  detailParams.delete("run");
+  detailParams.delete("page");
+  detailParams.set("fromPage", String(activePage));
 
   return (
     <div className="page recommendations-page">
       <div className="recommendation-toolbar">
         <div className="segmented" aria-label="视图切换">
-          <button className={view === "grid" ? "active" : ""} onClick={() => setView("grid")} aria-pressed={view === "grid"}>
+          <button
+            className={view === "grid" ? "active" : ""}
+            onClick={() => {
+              setView("grid");
+              replaceQuery((query) => query.delete("view"), false);
+            }}
+            aria-pressed={view === "grid"}
+          >
             <GridFour size={18} /> 网格
           </button>
-          <button className={view === "list" ? "active" : ""} onClick={() => setView("list")} aria-pressed={view === "list"}>
+          <button
+            className={view === "list" ? "active" : ""}
+            onClick={() => {
+              setView("list");
+              replaceQuery((query) => query.set("view", "list"), false);
+            }}
+            aria-pressed={view === "list"}
+          >
             <List size={18} /> 列表
           </button>
         </div>
@@ -233,7 +307,14 @@ export default function RecommendationsPage() {
               { value: "年份", label: "年份" },
               { value: "支持人数", label: "支持人数" },
             ]}
-            onValueChange={(value) => { setSort(value); setCurrentPage(1); }}
+            onValueChange={(value) => {
+              setSort(value);
+              setCurrentPage(1);
+              replaceQuery((query) => {
+                if (value === "推荐分数") query.delete("sort");
+                else query.set("sort", value);
+              });
+            }}
           />
           <Dialog.Root>
             <Dialog.Trigger asChild>
@@ -263,7 +344,14 @@ export default function RecommendationsPage() {
                         type="button"
                         key={option.value}
                         className={format === option.value ? "active" : ""}
-                        onClick={() => { setFormat(option.value); setCurrentPage(1); }}
+                        onClick={() => {
+                          setFormat(option.value);
+                          setCurrentPage(1);
+                          replaceQuery((query) => {
+                            if (option.value === "全部") query.delete("format");
+                            else query.set("format", option.value);
+                          });
+                        }}
                       >
                         {option.label}
                       </button>
@@ -272,121 +360,170 @@ export default function RecommendationsPage() {
                 </fieldset>
                 <fieldset>
                   <legend>Bangumi 评分</legend>
-                  <div className="filter-range-values">
-                    <strong>{minimumScore.toFixed(1)}</strong>
-                    <span>至</span>
-                    <strong>{maximumScore.toFixed(1)}</strong>
-                    {scoreFilterActive && bangumiScoresQuery.isPending && (
-                      <strong className="filter-status">正在读取评分</strong>
-                    )}
-                  </div>
-                  <div className="dual-range-control">
-                    <label>
-                      <span>最低</span>
+                  <label className="filter-toggle">
+                    <input
+                      type="checkbox"
+                      checked={scoreFilterEnabled}
+                      onChange={(event) => {
+                        const enabled = event.target.checked;
+                        setScoreFilterEnabled(enabled);
+                        setCurrentPage(1);
+                        replaceQuery((query) => {
+                          if (enabled) query.set("score", minimumScore.toFixed(1));
+                          else query.delete("score");
+                        });
+                      }}
+                    />
+                    <span>按评分过滤</span>
+                    <i aria-hidden="true" />
+                  </label>
+                  {scoreFilterEnabled && (
+                    <div className="filter-slider-field">
+                      <div className="filter-slider-heading">
+                        <span>最低评分</span>
+                        <output>{minimumScore.toFixed(1)}</output>
+                      </div>
                       <input
+                        className="filter-slider"
                         type="range"
                         min={SCORE_MIN}
                         max={SCORE_MAX}
                         step="0.1"
                         value={minimumScore}
                         onChange={(event) => {
-                          setMinimumScore(Math.min(Number(event.target.value), maximumScore));
+                          const value = Number(event.target.value);
+                          setMinimumScore(value);
                           setCurrentPage(1);
+                          replaceQuery((query) => query.set("score", value.toFixed(1)));
                         }}
                       />
-                    </label>
-                    <label>
-                      <span>最高</span>
-                      <input
-                        type="range"
-                        min={SCORE_MIN}
-                        max={SCORE_MAX}
-                        step="0.1"
-                        value={maximumScore}
-                        onChange={(event) => {
-                          setMaximumScore(Math.max(Number(event.target.value), minimumScore));
-                          setCurrentPage(1);
-                        }}
-                      />
-                    </label>
-                  </div>
+                    </div>
+                  )}
                 </fieldset>
                 <fieldset>
                   <legend>发行年份</legend>
-                  <div className="filter-range-values">
-                    <strong>{selectedMinimumYear}</strong>
-                    <span>至</span>
-                    <strong>{selectedMaximumYear}</strong>
-                  </div>
-                  <div className="dual-range-control">
-                    <label>
-                      <span>最早</span>
-                      <input
-                        type="range"
-                        min={yearBounds.minimum}
-                        max={yearBounds.maximum}
-                        step="1"
-                        value={selectedMinimumYear}
-                        onChange={(event) => {
-                          setMinimumYear(Math.min(Number(event.target.value), selectedMaximumYear));
-                          setCurrentPage(1);
-                        }}
-                      />
-                    </label>
-                    <label>
-                      <span>最晚</span>
-                      <input
-                        type="range"
-                        min={yearBounds.minimum}
-                        max={yearBounds.maximum}
-                        step="1"
-                        value={selectedMaximumYear}
-                        onChange={(event) => {
-                          setMaximumYear(Math.max(Number(event.target.value), selectedMinimumYear));
-                          setCurrentPage(1);
-                        }}
-                      />
-                    </label>
-                  </div>
-                </fieldset>
-                <fieldset>
-                  <legend>最低相似观众支持</legend>
-                  <label className="range-control">
+                  <label className="filter-toggle">
                     <input
-                      type="range"
-                      min="0"
-                      max="20"
-                      step="5"
-                      value={minimum}
-                      onChange={(event) => { setMinimum(Number(event.target.value)); setCurrentPage(1); }}
+                      type="checkbox"
+                      checked={yearFilterEnabled}
+                      onChange={(event) => {
+                        const enabled = event.target.checked;
+                        setYearFilterEnabled(enabled);
+                        setCurrentPage(1);
+                        replaceQuery((query) => {
+                          if (enabled) query.set("year", `${minimumYear}-${maximumYear}`);
+                          else query.delete("year");
+                        });
+                      }}
                     />
-                    <span>{minimum || "不限"} 人</span>
+                    <span>按年份过滤</span>
+                    <i aria-hidden="true" />
                   </label>
+                  {yearFilterEnabled && (
+                    <div className="filter-slider-field">
+                      <div className="filter-slider-heading">
+                        <span>年份区间</span>
+                        <output>{minimumYear} - {maximumYear}</output>
+                      </div>
+                      <div
+                        className="dual-thumb-range"
+                        style={{
+                          "--range-start": `${yearStart}%`,
+                          "--range-end": `${yearEnd}%`,
+                        } as CSSProperties}
+                      >
+                        <div className="dual-thumb-track" />
+                        <input
+                          aria-label="最早发行年份"
+                          type="range"
+                          min={YEAR_MIN}
+                          max={YEAR_MAX}
+                          step="1"
+                          value={minimumYear}
+                          onChange={(event) => {
+                            const value = Math.min(Number(event.target.value), maximumYear);
+                            setMinimumYear(value);
+                            setCurrentPage(1);
+                            replaceQuery((query) => query.set("year", `${value}-${maximumYear}`));
+                          }}
+                        />
+                        <input
+                          aria-label="最晚发行年份"
+                          type="range"
+                          min={YEAR_MIN}
+                          max={YEAR_MAX}
+                          step="1"
+                          value={maximumYear}
+                          onChange={(event) => {
+                            const value = Math.max(Number(event.target.value), minimumYear);
+                            setMaximumYear(value);
+                            setCurrentPage(1);
+                            replaceQuery((query) => query.set("year", `${minimumYear}-${value}`));
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </fieldset>
                 <fieldset>
-                  <legend>内容时长</legend>
-                  <label className="filter-check">
+                  <div className="filter-slider-heading">
+                    <span className="filter-field-label">最低相似观众支持</span>
+                    <output>{minimum ? `${minimum} 人` : "不限"}</output>
+                  </div>
+                  <input
+                    className="filter-slider"
+                    type="range"
+                    min="0"
+                    max="20"
+                    step="5"
+                    value={minimum}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      setMinimum(value);
+                      setCurrentPage(1);
+                      replaceQuery((query) => {
+                        if (value) query.set("support", String(value));
+                        else query.delete("support");
+                      });
+                    }}
+                  />
+                </fieldset>
+                <fieldset className="filter-toggle-group">
+                  <legend>内容与系列</legend>
+                  <label className="filter-toggle">
                     <input
                       type="checkbox"
                       checked={includeShortForm}
                       onChange={(event) => {
-                        setIncludeShortForm(event.target.checked);
+                        const checked = event.target.checked;
+                        setIncludeShortForm(checked);
                         setCurrentPage(1);
+                        replaceQuery((query) => {
+                          if (checked) query.delete("short");
+                          else query.set("short", "0");
+                        });
                       }}
                     />
                     <span>包含泡面番</span>
+                    <i aria-hidden="true" />
                   </label>
-                </fieldset>
-                <fieldset>
-                  <legend>系列关系</legend>
-                  <button
-                    type="button"
-                    className={`filter-option-toggle${filterRelated ? " active" : ""}`}
-                    aria-pressed={filterRelated}
-                    onClick={() => { setFilterRelated((value) => !value); setCurrentPage(1); }}
-                  >
-                    过滤续作、衍生作
-                  </button>
+                  <label className="filter-toggle">
+                    <input
+                      type="checkbox"
+                      checked={filterRelated}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setFilterRelated(checked);
+                        setCurrentPage(1);
+                        replaceQuery((query) => {
+                          if (checked) query.set("related", "1");
+                          else query.delete("related");
+                        });
+                      }}
+                    />
+                    <span>过滤续作、衍生作</span>
+                    <i aria-hidden="true" />
+                  </label>
                 </fieldset>
               </Dialog.Content>
             </Dialog.Portal>
@@ -395,18 +532,14 @@ export default function RecommendationsPage() {
       </div>
 
       {profilesQuery.isPending || (profile?.rating_count && isPending) ? (
-        <StatePanel
-          title="正在生成推荐"
-        />
+        <StatePanel title="正在生成推荐" />
       ) : profile && profile.rating_count < 5 ? (
         <StatePanel
           title="至少录入 5 条有效评分"
           action={{ label: "导入或手动评分", href: "/onboarding" }}
         />
       ) : profilesQuery.isError || isError ? (
-        <StatePanel
-          title="推荐暂时不可用"
-        />
+        <StatePanel title="推荐暂时不可用" />
       ) : filtered.length ? (
         <>
           <div className={view === "grid" ? "recommendation-grid" : "recommendation-list"}>
@@ -416,7 +549,7 @@ export default function RecommendationsPage() {
                 item={item}
                 compact={view === "list"}
                 runId={data?.runId}
-                detailHref={`/recommendations/${data?.runId}/${item.anime.mal_id}?fromPage=${activePage}`}
+                detailHref={`/recommendations/${data?.runId}/${item.anime.mal_id}?${detailParams.toString()}`}
                 onOpen={rememberPosition}
                 onFeedback={handleFeedback}
               />
@@ -450,9 +583,7 @@ export default function RecommendationsPage() {
           )}
         </>
       ) : (
-        <StatePanel
-          title="当前筛选没有结果"
-        />
+        <StatePanel title="当前筛选没有结果" />
       )}
     </div>
   );
