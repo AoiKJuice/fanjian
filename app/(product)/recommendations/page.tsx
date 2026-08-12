@@ -203,7 +203,7 @@ export default function RecommendationsPage() {
     },
     enabled: Boolean(profileId && profile.rating_count >= 5),
   });
-  const { data, isError, isPending } = recommendationsQuery;
+  const { data, isError, isFetching, isPending } = recommendationsQuery;
   const recommendations = useMemo(() => data?.items ?? [], [data?.items]);
   const filtered = useMemo(() => {
     if (sort === "年份") {
@@ -716,7 +716,10 @@ export default function RecommendationsPage() {
         </div>
       </div>
 
-      {profilesQuery.isPending || (profile?.rating_count && isPending) ? (
+      {profilesQuery.isPending || (
+        Boolean(profile?.rating_count) &&
+        (isPending || (isFetching && recommendations.length === 0))
+      ) ? (
         <StatePanel title="正在生成推荐" />
       ) : profile && profile.rating_count < 5 ? (
         <StatePanel
