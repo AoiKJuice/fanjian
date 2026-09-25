@@ -108,7 +108,7 @@ function BrowserModelGate() {
         ) : (
           <>
             <h1 id="model-gate-title">
-              即将下载约 3.03 GiB <span className="model-file-label">模型文件</span>
+              即将下载{currentStatus?.totalBytes ? `约 ${(currentStatus.totalBytes / 1024 ** 3).toFixed(2)} GiB ` : ""}<span className="model-file-label">模型文件</span>
             </h1>
             <div className="model-gate-actions">
               <button

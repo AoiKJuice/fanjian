@@ -267,7 +267,7 @@ function BrowserModelDownload() {
       setStoredStatus({
         state: "error",
         downloadedBytes: 0,
-        totalBytes: 3263204947,
+        totalBytes: 0,
         error: reason instanceof Error ? reason.message : "模型状态读取失败",
       });
     });

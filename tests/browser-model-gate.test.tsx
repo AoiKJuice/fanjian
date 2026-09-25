@@ -70,9 +70,15 @@ describe("browser model gate", () => {
   it("asks for confirmation with the requested copy", async () => {
     renderGate();
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("即将下载约 3.03 GiB 模型文件");
+    expect(dialog).toHaveTextContent("即将下载约 3.04 GiB 模型文件");
     expect(screen.getByRole("button", { name: "取消" })).toBeVisible();
     expect(screen.getByRole("button", { name: "确认下载" })).toBeVisible();
+  });
+
+  it("uses the new model's actual download size", async () => {
+    mocks.browserModelStatus.mockResolvedValue({state: "missing", downloadedBytes: 0, totalBytes: 1656469862});
+    renderGate();
+    expect(await screen.findByRole("dialog")).toHaveTextContent("即将下载约 1.54 GiB 模型文件");
   });
 
   it("shows download progress after confirmation", async () => {

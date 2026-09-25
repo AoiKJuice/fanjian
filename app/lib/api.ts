@@ -285,7 +285,9 @@ export async function loadModelCard(): Promise<ModelCard> {
     return {
       model_version: status.manifest.model_version,
       data_version: status.manifest.data_version,
-      algorithm: "surprise weighted userknn",
+      algorithm: status.manifest.algorithm === "ease-risk-lambdamart"
+        ? "EASE + 风险调整 + LambdaMART"
+        : "surprise weighted userknn",
       catalog_items: status.manifest.catalog_items,
       training_users: status.manifest.training_users,
       training_ratings: status.manifest.training_ratings,

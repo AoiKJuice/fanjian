@@ -95,7 +95,7 @@ export function downloadBrowserModel(
   publishDownloadStatus({
     state: "downloading",
     downloadedBytes: downloadSnapshot?.downloadedBytes ?? 0,
-    totalBytes: downloadSnapshot?.totalBytes ?? 3263204947,
+    totalBytes: downloadSnapshot?.totalBytes ?? 0,
     manifest: downloadSnapshot?.manifest,
   });
   const task = call<ModelStatus>(
@@ -111,7 +111,7 @@ export function downloadBrowserModel(
     (reason: Error) => publishDownloadStatus({
       state: "error",
       downloadedBytes: downloadSnapshot?.downloadedBytes ?? 0,
-      totalBytes: downloadSnapshot?.totalBytes ?? 3263204947,
+      totalBytes: downloadSnapshot?.totalBytes ?? 0,
       error: reason.message,
       manifest: downloadSnapshot?.manifest,
     }),
