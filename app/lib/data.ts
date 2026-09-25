@@ -27,6 +27,7 @@ export type Evidence = {
 };
 
 export type Recommendation = {
+  score_kind?: "rank";
   anime: Anime;
   rank_score: number;
   affinity: number;

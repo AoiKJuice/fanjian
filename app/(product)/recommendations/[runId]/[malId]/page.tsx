@@ -302,8 +302,8 @@ export default function RecommendationDetailPage() {
           )}
         </div>
         <div className="affinity-panel">
-          <span className="eyebrow">预测亲和度</span>
-          <strong>{item.affinity}</strong>
+          <span className="eyebrow">{item.score_kind === "rank" ? "排序分（非喜欢概率）" : "预测亲和度"}</span>
+          <strong>{item.score_kind === "rank" ? item.rank_score.toFixed(2) : item.affinity}</strong>
         </div>
       </section>
 
@@ -324,10 +324,11 @@ export default function RecommendationDetailPage() {
 
         <section className="section-block">
           <div className="section-heading">
-            <h2>同好们评分</h2>
+            <h2>{item.score_kind === "rank" ? "评分依据" : "同好们评分"}</h2>
             <ChartBar size={24} weight="duotone" />
           </div>
           <div className="distribution-bars">
+            {item.score_kind === "rank" && <p>当前模型使用作品间的评分关系排序，不提供相似用户评分分布。{item.risk}</p>}
             {Object.entries(item.neighbor_distribution).map(([label, count]) => (
               <div key={label}>
                 <span>{label} 分</span>

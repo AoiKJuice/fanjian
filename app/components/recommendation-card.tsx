@@ -104,8 +104,8 @@ export function RecommendationCard({
           )}
         </div>
         <div className="compact-affinity">
-          <strong>{item.affinity}</strong>
-          <span>亲和度</span>
+          <strong>{item.score_kind === "rank" ? item.rank_score.toFixed(2) : item.affinity}</strong>
+          <span>{item.score_kind === "rank" ? "排序分" : "亲和度"}</span>
         </div>
       </article>
     );
@@ -129,8 +129,8 @@ export function RecommendationCard({
           src={anime.cover_url}
         />
         <span className="affinity-stamp">
-          <strong>{item.affinity}</strong>
-          <small>亲和度</small>
+          <strong>{item.score_kind === "rank" ? item.rank_score.toFixed(2) : item.affinity}</strong>
+          <small>{item.score_kind === "rank" ? "排序分" : "亲和度"}</small>
         </span>
       </Link>
       <div className="recommendation-copy">

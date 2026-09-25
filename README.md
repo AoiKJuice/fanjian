@@ -1,8 +1,16 @@
 # 番鉴
 
-番鉴是本地运行的番剧评分推荐系统。核心模型根据目标用户与训练用户在共同
-作品上的评分残差计算相似度，再从正相似观众喜欢、目标用户未看过的作品中
-生成推荐。
+番鉴是本地运行的番剧评分推荐系统。浏览器版使用 EASE、低评分风险模型与
+LambdaMART 组合排序，评分资料仍只保存在用户设备内。当前版本为
+`ease-risk-lambdamart-2026-09-25`，模型下载约 1.66 GB，按行读取以控制内存。
+所有用户共用冻结参数，没有按个人资料训练或调参。
+
+最新浏览器模型见 [model-2026-09-25](https://github.com/AoiKJuice/fanjian/releases/tag/model-2026-09-25)，
+文件大小、SHA-256 和下载地址见 `scripts/ranker-release.json`。
+算法范围、验证与部署方式见 [模型发布说明](docs/RANKER_RELEASE_2026-09-25.md)。
+
+以下 Windows Python API 启动方式仍使用兼容的旧 UserKNN 模型，
+其下载清单为 `scripts/model-release.json`。两套模型版本分别标识，不混用文件。
 
 模型包含：
 
@@ -36,11 +44,11 @@ npm run start
 
 ## 手机浏览器部署
 
-服务器模式由 Nginx 提供网页，模型文件由 GitHub Release 经 Cloudflare Worker
-传输。模型下载到浏览器 OPFS，资料、
+服务器模式由 Nginx 提供网页和 GitHub Release 模型的同源镜像。
+模型下载到浏览器 OPFS，资料、
 评分、收藏与推荐历史保存在 IndexedDB，推荐计算由 Web Worker 在设备内执行。
 服务器不运行推荐 API。构建参数见 `deploy/docker-compose.web.yml`，模型目录清单
-由以下命令生成：
+旧 UserKNN 目录可由以下命令生成；新版发布步骤见上述发布说明：
 
 ```bash
 python scripts/prepare_browser_model.py \
