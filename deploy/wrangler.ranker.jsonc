@@ -1,0 +1,13 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "fanjian-ranker",
+  "main": "cloudflare-ranker-worker.js",
+  "compatibility_date": "2026-09-25",
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "www.aoikjuice.com/tools/anime-affinity/model/releases/model-2026-09-25/*",
+      "zone_name": "aoikjuice.com"
+    }
+  ]
+}
