@@ -6,6 +6,7 @@ import {
   shortFormAnimeIds,
 } from "../lib/anime-metadata.generated";
 import { parseNpyShape } from "../lib/npy";
+import { RankerEngine, type RankerMetadata, type MatrixName } from "../lib/ranker-engine";
 import type {
   BrowserCatalogItem,
   BrowserModelFile,
@@ -379,7 +380,8 @@ async function downloadFile(
 ) {
   const handle = await fileHandleForPath(directory, record.path, true);
   let file = await handle.getFile();
-  let offset = file.size <= record.bytes ? file.size : 0;
+  // A complete but corrupt file must restart, never request bytes past EOF.
+  let offset = file.size < record.bytes ? file.size : 0;
   const headers = offset ? { Range: `bytes=${offset}-` } : undefined;
   const response = await fetch(record.url, { headers });
   if (!response.ok && response.status !== 206) {
@@ -508,6 +510,8 @@ function numberAt(values: TypedArray, index: number) {
 }
 
 class BrowserRecommender {
+  private ranker: RankerEngine | null = null;
+  private rankedCache: { key: string; items: Recommendation[] } | null = null;
   private catalog: BrowserCatalogItem[] = [];
   private itemByMal = new Map<number, number>();
   private malIds!: Int32Array;
@@ -554,6 +558,23 @@ class BrowserRecommender {
     this.requiresContext = Uint8Array.from(
       this.catalog.map((item) => Number(requiresSeriesContext(item.format, item.title_en))),
     );
+    if (manifest.algorithm === "ease-risk-lambdamart") {
+      if (!manifest.ranker_metadata || !manifest.matrix_prefix || !manifest.matrix_item_count) {
+        throw new Error("排序模型清单不完整");
+      }
+      const metadata = await readJson<RankerMetadata>(directory, manifest.ranker_metadata);
+      const files = new Map<MatrixName, File>();
+      for (const name of ['ease', 'liked_to_low', 'disliked_to_low', 'disliked_to_high'] as MatrixName[]) {
+        const file = await (await fileHandleForPath(directory, manifest.matrix_prefix + name + '.bin', false)).getFile();
+        if (file.size !== metadata.item_count ** 2 * 4) throw new Error("排序矩阵大小不符");
+        files.set(name, file);
+      }
+      this.ranker = new RankerEngine(metadata, async (name, row) => {
+        const width = metadata.item_count * 4;
+        return new Float32Array(await files.get(name)!.slice(row * width, (row + 1) * width).arrayBuffer());
+      });
+      return;
+    }
     const open = (path: string) => NpyReader.open(directory, path);
     const [malIds, itemBias, itemCounts, itemIuf, itemSurprise, csrIndptr, cscIndptr] =
       await Promise.all([
@@ -621,6 +642,15 @@ class BrowserRecommender {
   }
 
   async neighborStats(ratings: Record<number, number>, negativeItems: number[]) {
+    if (this.ranker) {
+      const m = this.ranker.metadata;
+      const counts = m.counts.filter(n => n > 0).sort((a, b) => a - b);
+      const byMal = new Map(m.mal_ids.map((id, i) => [id, m.counts[i]]));
+      const watched = Object.keys(ratings).flatMap(id => byMal.has(Number(id)) ? [byMal.get(Number(id))!] : []);
+      return { neighborCount: 0, meanOverlap: 0,
+        mainstreamIndex: watched.length ? 100 * watched.reduce((s, n) => s + upperBound(counts, n) / counts.length, 0) / watched.length : 0,
+        longTailRatio: watched.length ? 100 * watched.filter(n => n <= counts[Math.floor((counts.length - 1) * .33)]).length / watched.length : 0 };
+    }
     const { neighbors } = await this.neighborData(ratings, negativeItems);
     const catalogCounts = Array.from(this.itemCounts, Number)
       .filter((value) => value > 0)
@@ -650,6 +680,7 @@ class BrowserRecommender {
   }
 
   async recommend(payload: ModelRecommendationRequest): Promise<ModelRecommendationResult> {
+    if (this.ranker) return this.recommendRanked(payload);
     const core = await this.recommendationCoreFor(payload);
     const neighbors = core.neighbors;
     if (!neighbors.length) {
@@ -718,6 +749,48 @@ class BrowserRecommender {
     };
   }
 
+  private async recommendRanked(payload: ModelRecommendationRequest): Promise<ModelRecommendationResult> {
+    const { offset = 0, limit, ...inputs } = payload;
+    const key = JSON.stringify(inputs);
+    if (this.rankedCache?.key !== key) {
+      const excluded = new Set([...payload.excluded, ...payload.negativeItems, ...Object.keys(payload.ratings).map(Number)]);
+      const formats = new Set(payload.formats.map(f => f.toUpperCase()));
+      const profileSeries = new Set(Object.keys(payload.ratings).flatMap(id => {
+        const i = this.itemByMal.get(Number(id));
+        return i === undefined ? [] : [this.seriesKeys[i]];
+      }));
+      for (let i = 0; i < this.catalog.length; i++) {
+        const item = this.catalog[i], score = item.bangumi_score;
+        if ((formats.size && !formats.has(item.format.toUpperCase())) ||
+            (payload.minimumBangumiScore != null && (score == null || !Number.isFinite(score) || score < payload.minimumBangumiScore)) ||
+            (payload.minimumYear != null && (!item.year || item.year < payload.minimumYear)) ||
+            (payload.maximumYear != null && (!item.year || item.year > payload.maximumYear)) ||
+            (payload.includeShortForm === false && shortFormAnimeIds.has(item.mal_id)) ||
+            (payload.excludeRelated && (item.sequel || this.inferredContinuation[i] || this.requiresContext[i] || this.ancillary[i] || nonPrimaryAnimeIds.has(item.mal_id))) ||
+            (!payload.allowSequels && (item.sequel || this.inferredContinuation[i] || (this.requiresContext[i] && !profileSeries.has(this.seriesKeys[i]))))) {
+          excluded.add(item.mal_id);
+        }
+      }
+      const metadata = this.ranker!.metadata;
+      // Support is training observations for this model, not fictitious neighbors.
+      metadata.mal_ids.forEach((id, i) => { if (metadata.counts[i] < payload.minSupport) excluded.add(id); });
+      const ranked = await this.ranker!.recommend(payload.ratings, excluded);
+      const items: Recommendation[] = ranked.map(row => ({
+        anime: publicAnime(this.catalog[this.itemByMal.get(row.mal_id)!]),
+        score_kind: "rank", rank_score: row.score, affinity: 0,
+        confidence: "低", support: metadata.counts[row.row], effective_sample_size: 0,
+        reason: "根据你的高分作品、低分作品和作品间的评分关系排序。",
+        evidence: [], neighbor_distribution: {},
+        risk: "排序分仅用于本次候选的相对排序，不代表喜欢概率；尚未提供置信度估计。",
+        relation_notice: null,
+      }));
+      this.rankedCache = { key, items };
+    }
+    const start = Math.max(0, offset), size = Math.max(1, limit);
+    return { items: this.rankedCache.items.slice(start, start + size), neighborCount: 0,
+      meanOverlap: 0, hasMore: this.rankedCache.items.length > start + size };
+  }
+
   private recommendationInputKey(
     ratings: Record<number, number>,
     negativeItems: number[],
@@ -736,7 +809,7 @@ class BrowserRecommender {
     if (this.neighborCache?.key === key) return this.neighborCache;
     while (this.neighborBuild) await this.neighborBuild;
     if (this.neighborCache?.key === key) return this.neighborCache;
-    let releaseBuild = () => undefined;
+    let releaseBuild: () => void = () => undefined;
     const build = new Promise<void>((resolve) => {
       releaseBuild = resolve;
     });
@@ -762,7 +835,7 @@ class BrowserRecommender {
     if (this.recommendationCache?.key === requestedKey) return this.recommendationCache;
     while (this.recommendationBuild) await this.recommendationBuild;
     if (this.recommendationCache?.key === requestedKey) return this.recommendationCache;
-    let releaseBuild = () => undefined;
+    let releaseBuild: () => void = () => undefined;
     const build = new Promise<void>((resolve) => {
       releaseBuild = resolve;
     });
@@ -1177,6 +1250,7 @@ class BrowserRecommender {
 }
 
 let runtime: BrowserRecommender | null = null;
+let runtimeLoading: Promise<BrowserRecommender> | null = null;
 let catalogRuntime: BrowserCatalog | null = null;
 
 class BrowserCatalog {
@@ -1229,11 +1303,17 @@ async function readyCatalog() {
 
 async function readyRuntime() {
   if (runtime) return runtime;
-  const manifest = await installedManifest();
-  if (!manifest) throw new Error("模型尚未下载");
-  runtime = new BrowserRecommender();
-  await runtime.initialize(manifest);
-  return runtime;
+  if (!runtimeLoading) {
+    runtimeLoading = (async () => {
+      const manifest = await installedManifest();
+      if (!manifest) throw new Error("模型尚未下载");
+      const loaded = new BrowserRecommender();
+      await loaded.initialize(manifest);
+      runtime = loaded;
+      return loaded;
+    })().finally(() => { runtimeLoading = null; });
+  }
+  return runtimeLoading;
 }
 
 function publicAnime(item: BrowserCatalogItem): Anime {

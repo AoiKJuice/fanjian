@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "algorithm": "ease-risk-lambdamart",
+  "model_version": "ease-risk-lambdamart-2026-09-25",
+  "data_version": "user-animelist-v1+catalog-2026-27",
+  "total_bytes": 1656469862,
+  "catalog_items": 30677,
+  "training_users": 96000,
+  "training_ratings": 10822649,
+  "files": [
+    {
+      "path": "ranker-20260925/disliked_to_high.bin",
+      "bytes": 408444100,
+      "sha256": "a8a9e565050a13d1c69f5e4d197f09893fe3d506a51e6bea9974d29099ee8170",
+      "url": "https://github.com/AoiKJuice/fanjian/releases/download/model-2026-09-25/disliked_to_high.bin"
+    },
+    {
+      "path": "ranker-20260925/disliked_to_low.bin",
+      "bytes": 408444100,
+      "sha256": "3e57d26c18327d08a353569c4d50e47c30a17cd0417f00ddd847ffcd0a2d9ee9",
+      "url": "https://github.com/AoiKJuice/fanjian/releases/download/model-2026-09-25/disliked_to_low.bin"
+    },
+    {
+      "path": "ranker-20260925/ease.bin",
+      "bytes": 408444100,
+      "sha256": "9f447939872b0939b7789ca0d5ab60bc654ef85d43ed8bafc339572e89cb4dfe",
+      "url": "https://github.com/AoiKJuice/fanjian/releases/download/model-2026-09-25/ease.bin"
+    },
+    {
+      "path": "ranker-20260925/liked_to_low.bin",
+      "bytes": 408444100,
+      "sha256": "0b5acae0eddc5044ae7da0240e38fe327e512fb11c595ac731f4a5eb775938b2",
+      "url": "https://github.com/AoiKJuice/fanjian/releases/download/model-2026-09-25/liked_to_low.bin"
+    },
+    {
+      "path": "ranker-20260925/provenance.json",
+      "bytes": 827,
+      "sha256": "ebe3574b7c843093c1f3c5c0807a10bf887bd8a13a63f41eae87f0ff5fcd3c98",
+      "url": "https://github.com/AoiKJuice/fanjian/releases/download/model-2026-09-25/provenance.json"
+    },
+    {
+      "path": "ranker-20260925/ranker.json",
+      "bytes": 2926603,
+      "sha256": "95f741da7c3c39174b03e67fcdaa74eece649995c565796e260ee843e6e25f65",
+      "url": "https://github.com/AoiKJuice/fanjian/releases/download/model-2026-09-25/ranker.json"
+    }
+  ],
+  "browser_catalog": {
+    "path": "ranker-20260925/catalog.json",
+    "bytes": 19766032,
+    "sha256": "94351310faa26c4d167265449a86eeca9b822ce7cedc18e2c20ac76e24324a0d",
+    "url": "https://github.com/AoiKJuice/fanjian/releases/download/model-2026-09-25/catalog.json"
+  },
+  "ranker_metadata": "ranker-20260925/ranker.json",
+  "matrix_prefix": "ranker-20260925/",
+  "matrix_item_count": 10105
+}

@@ -9,6 +9,10 @@ export type BrowserModelFile = {
 
 export type BrowserModelManifest = {
   schema_version: 1;
+  algorithm?: "ease-risk-lambdamart";
+  ranker_metadata?: string;
+  matrix_prefix?: string;
+  matrix_item_count?: number;
   model_version: string;
   data_version: string;
   total_bytes: number;
