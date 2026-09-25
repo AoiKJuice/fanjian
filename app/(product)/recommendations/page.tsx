@@ -452,7 +452,7 @@ export default function RecommendationsPage() {
             options={[
               { value: "推荐分数", label: "推荐分数" },
               { value: "年份", label: "年份" },
-              { value: "支持人数", label: "支持人数" },
+              { value: "支持人数", label: "评分样本数" },
             ]}
             onValueChange={(value) => {
               setSort(value);
@@ -641,7 +641,7 @@ export default function RecommendationsPage() {
                 </fieldset>
                 <fieldset>
                   <div className="filter-slider-heading">
-                    <span className="filter-field-label">最低相似观众支持</span>
+                    <span className="filter-field-label">最低评分样本数</span>
                     <output>{minimum ? `${minimum} 人` : "不限"}</output>
                   </div>
                   <input
