@@ -44,7 +44,8 @@ npm run start
 
 ## 手机浏览器部署
 
-服务器模式由 Nginx 提供网页和 GitHub Release 模型的同源镜像。
+服务器模式由 Nginx 提供网页和模型清单；模型大文件由 Cloudflare Worker 从
+GitHub Release 流式传输，不占用网页服务器的出站带宽。
 模型下载到浏览器 OPFS，资料、
 评分、收藏与推荐历史保存在 IndexedDB，推荐计算由 Web Worker 在设备内执行。
 服务器不运行推荐 API。构建参数见 `deploy/docker-compose.web.yml`，模型目录清单
@@ -57,8 +58,12 @@ python scripts/prepare_browser_model.py \
   --catalog-url-path catalog.json
 ```
 
-Worker 源码见 `deploy/cloudflare-model-worker.js`。Nginx 只提供
-`browser-model-manifest.json`，配置见 `deploy/nginx.browser-model.conf`。
+新版模型 Worker 见 `deploy/cloudflare-ranker-worker.js`，部署命令为
+`npx wrangler deploy -c deploy/wrangler.ranker.jsonc`。它只匹配新版模型下载路径，
+不修改原有社区数据 Worker。原 UserKNN Worker 见 `deploy/cloudflare-model-worker.js`。
+Nginx 配置见 `deploy/nginx.browser-model.conf`；保留的服务器模型目录仅用于故障恢复，
+正常下载由 Cloudflare 路由直接处理。模型清单请求会合并并缓存一分钟；
+已有本地模型时远程检查最多等待 2.5 秒，随后继续使用本地模型。
 
 ## 目录与模型构建
 

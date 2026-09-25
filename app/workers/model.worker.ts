@@ -6,6 +6,7 @@ import {
   shortFormAnimeIds,
 } from "../lib/anime-metadata.generated";
 import { parseNpyShape } from "../lib/npy";
+import { createManifestLoader } from "../lib/model-manifest";
 import { RankerEngine, type RankerMetadata, type MatrixName } from "../lib/ranker-engine";
 import type {
   BrowserCatalogItem,
@@ -293,11 +294,7 @@ async function writeJson(
   await writable.close();
 }
 
-async function fetchManifest(url: string) {
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) throw new Error(`模型清单读取失败：HTTP ${response.status}`);
-  return (await response.json()) as BrowserModelManifest;
-}
+const fetchManifest = createManifestLoader();
 
 async function installedManifest() {
   try {
@@ -325,7 +322,7 @@ async function currentStatus(manifestUrl: string): Promise<ModelStatus> {
   const installed = await installedManifest();
   let manifest: BrowserModelManifest;
   try {
-    manifest = await fetchManifest(manifestUrl);
+    manifest = await fetchManifest(manifestUrl, { timeoutMs: installed ? 2500 : 8000 });
   } catch (reason) {
     if (!installed) throw reason;
     manifest = installed;
@@ -429,7 +426,7 @@ async function downloadModel(
   manifestUrl: string,
   report: (progress: ModelDownloadProgress) => void,
 ) {
-  const manifest = await fetchManifest(manifestUrl);
+  const manifest = await fetchManifest(manifestUrl, { fresh: true });
   await navigator.storage.persist?.();
   const directory = await modelDirectory(true);
   const records = [manifest.browser_catalog, ...manifest.files];
