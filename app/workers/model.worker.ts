@@ -6,23 +6,21 @@ import {
   shortFormAnimeIds,
 } from "../lib/anime-metadata.generated";
 import { parseNpyShape } from "../lib/npy";
-import { createManifestLoader } from "../lib/model-manifest";
+import { ModelStorage } from "../lib/model-storage";
 import { RankerEngine, type RankerMetadata, type MatrixName } from "../lib/ranker-engine";
 import type {
   BrowserCatalogItem,
-  BrowserModelFile,
   BrowserModelManifest,
-  ModelDownloadProgress,
   ModelRecommendationRequest,
   ModelRecommendationResult,
-  ModelStatus,
   ModelWorkerRequest,
   ModelWorkerResponse,
 } from "../lib/model-types";
 
-const MODEL_DIRECTORY = "fanjian-model-v1";
-const INSTALLED_FILE = "installed.json";
-const CATALOG_FILE = ".catalog-installed.json";
+const storage = new ModelStorage(sha256File, () => {
+  runtime = null;
+  catalogRuntime = null;
+});
 
 const GENRE_LABELS: Record<string, string> = {
   action: "动作",
@@ -260,11 +258,6 @@ function rotateRight(value: number, shift: number) {
   return (value >>> shift) | (value << (32 - shift));
 }
 
-async function modelDirectory(create = true) {
-  const root = await navigator.storage.getDirectory();
-  return root.getDirectoryHandle(MODEL_DIRECTORY, { create });
-}
-
 async function fileHandleForPath(
   directory: FileSystemDirectoryHandle,
   path: string,
@@ -283,175 +276,19 @@ async function readJson<T>(directory: FileSystemDirectoryHandle, path: string) {
   return JSON.parse(await (await handle.getFile()).text()) as T;
 }
 
-async function writeJson(
-  directory: FileSystemDirectoryHandle,
-  path: string,
-  value: unknown,
-) {
-  const handle = await fileHandleForPath(directory, path, true);
-  const writable = await handle.createWritable();
-  await writable.write(JSON.stringify(value));
-  await writable.close();
-}
+const installedManifest = () => storage.active();
+const catalogManifest = () => storage.catalog();
 
-const fetchManifest = createManifestLoader();
-
-async function installedManifest() {
-  try {
-    return await readJson<BrowserModelManifest>(
-      await modelDirectory(false),
-      INSTALLED_FILE,
-    );
-  } catch {
-    return null;
-  }
-}
-
-async function catalogManifest() {
-  try {
-    return await readJson<BrowserModelManifest>(
-      await modelDirectory(false),
-      CATALOG_FILE,
-    );
-  } catch {
-    return null;
-  }
-}
-
-async function currentStatus(manifestUrl: string): Promise<ModelStatus> {
-  const installed = await installedManifest();
-  let manifest: BrowserModelManifest;
-  try {
-    manifest = await fetchManifest(manifestUrl, { timeoutMs: installed ? 2500 : 8000 });
-  } catch (reason) {
-    if (!installed) throw reason;
-    manifest = installed;
-  }
-  let directory: FileSystemDirectoryHandle;
-  try {
-    directory = await modelDirectory(false);
-  } catch {
-    return {
-      state: "missing",
-      downloadedBytes: 0,
-      totalBytes: manifest.total_bytes,
-      manifest,
-    };
-  }
-  let downloadedBytes = 0;
-  let complete = installed?.model_version === manifest.model_version;
-  for (const record of [manifest.browser_catalog, ...manifest.files]) {
-    try {
-      const file = await (await fileHandleForPath(directory, record.path, false)).getFile();
-      downloadedBytes += Math.min(file.size, record.bytes);
-      if (file.size !== record.bytes) complete = false;
-    } catch {
-      complete = false;
-    }
-  }
-  return {
-    state: complete ? "ready" : "missing",
-    downloadedBytes,
-    totalBytes: manifest.total_bytes,
-    manifest,
-  };
-}
-
-async function sha256File(file: File) {
+async function sha256File(file: File, signal: AbortSignal) {
   const hash = new Sha256();
   const reader = file.stream().getReader();
   while (true) {
+    signal.throwIfAborted();
     const { done, value } = await reader.read();
     if (done) break;
     hash.update(value);
   }
   return hash.digest();
-}
-
-async function downloadFile(
-  directory: FileSystemDirectoryHandle,
-  record: BrowserModelFile,
-  downloadedBefore: number,
-  totalBytes: number,
-  report: (progress: ModelDownloadProgress) => void,
-) {
-  const handle = await fileHandleForPath(directory, record.path, true);
-  let file = await handle.getFile();
-  // A complete but corrupt file must restart, never request bytes past EOF.
-  let offset = file.size < record.bytes ? file.size : 0;
-  const headers = offset ? { Range: `bytes=${offset}-` } : undefined;
-  const response = await fetch(record.url, { headers });
-  if (!response.ok && response.status !== 206) {
-    throw new Error(`${record.path} 下载失败：HTTP ${response.status}`);
-  }
-  if (offset && response.status !== 206) offset = 0;
-  const writable = await handle.createWritable({ keepExistingData: offset > 0 });
-  if (!offset) await writable.truncate(0);
-  await writable.seek(offset);
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error(`${record.path} 没有下载数据`);
-  let position = offset;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      await writable.write(value);
-      position += value.byteLength;
-      report({
-        state: "downloading",
-        downloadedBytes: downloadedBefore + position,
-        totalBytes,
-        currentFile: record.path,
-      });
-    }
-  } catch (reason) {
-    try {
-      await writable.abort(reason);
-    } catch {
-      // The stream can already be errored by the failed write.
-    }
-    throw reason;
-  }
-  await writable.close();
-  file = await handle.getFile();
-  if (file.size !== record.bytes) {
-    throw new Error(`${record.path} 文件大小不符`);
-  }
-  if ((await sha256File(file)) !== record.sha256.toLowerCase()) {
-    throw new Error(`${record.path} 校验失败`);
-  }
-}
-
-async function downloadModel(
-  manifestUrl: string,
-  report: (progress: ModelDownloadProgress) => void,
-) {
-  const manifest = await fetchManifest(manifestUrl, { fresh: true });
-  await navigator.storage.persist?.();
-  const directory = await modelDirectory(true);
-  const records = [manifest.browser_catalog, ...manifest.files];
-  let completed = 0;
-  for (const record of records) {
-    const existing = await fileHandleForPath(directory, record.path, true).then(
-      (handle) => handle.getFile(),
-    );
-    if (
-      existing.size === record.bytes &&
-      (await sha256File(existing)) === record.sha256.toLowerCase()
-    ) {
-      completed += record.bytes;
-    } else {
-      await downloadFile(directory, record, completed, manifest.total_bytes, report);
-      completed += record.bytes;
-    }
-    if (record.path === manifest.browser_catalog.path) {
-      await writeJson(directory, CATALOG_FILE, manifest);
-      catalogRuntime = null;
-    }
-  }
-  await writeJson(directory, INSTALLED_FILE, manifest);
-  runtime = null;
-  return currentStatus(manifestUrl);
 }
 
 class NpyReader {
@@ -539,7 +376,7 @@ class BrowserRecommender {
   private recommendationBuild: Promise<void> | null = null;
 
   async initialize(manifest: BrowserModelManifest) {
-    const directory = await modelDirectory(false);
+    const directory = await storage.directory(manifest);
     this.catalog = await readJson<BrowserCatalogItem[]>(
       directory,
       manifest.browser_catalog.path,
@@ -1248,6 +1085,8 @@ class BrowserRecommender {
 
 let runtime: BrowserRecommender | null = null;
 let runtimeLoading: Promise<BrowserRecommender> | null = null;
+let runtimeVersion: string | null = null;
+let catalogVersion: string | null = null;
 let catalogRuntime: BrowserCatalog | null = null;
 
 class BrowserCatalog {
@@ -1287,25 +1126,29 @@ class BrowserCatalog {
 }
 
 async function readyCatalog() {
-  if (catalogRuntime) return catalogRuntime;
-  const manifest = await catalogManifest() ?? await installedManifest();
+  const manifest = await installedManifest() ?? await catalogManifest();
+  if (catalogRuntime && catalogVersion === manifest?.model_version) return catalogRuntime;
   if (!manifest) throw new Error("作品目录正在下载");
   const items = await readJson<BrowserCatalogItem[]>(
-    await modelDirectory(false),
+    await storage.directory(manifest),
     manifest.browser_catalog.path,
   );
+  catalogVersion = manifest.model_version;
   catalogRuntime = new BrowserCatalog(items);
   return catalogRuntime;
 }
 
 async function readyRuntime() {
-  if (runtime) return runtime;
+  const active = await installedManifest();
+  if (runtime && runtimeVersion === active?.model_version) return runtime;
+  runtime = null;
   if (!runtimeLoading) {
     runtimeLoading = (async () => {
       const manifest = await installedManifest();
       if (!manifest) throw new Error("模型尚未下载");
       const loaded = new BrowserRecommender();
       await loaded.initialize(manifest);
+      runtimeVersion = manifest.model_version;
       runtime = loaded;
       return loaded;
     })().finally(() => { runtimeLoading = null; });
@@ -1426,23 +1269,29 @@ function round(value: number, digits: number) {
   return Math.round(value * factor) / factor;
 }
 
-self.addEventListener("message", async (event: MessageEvent<ModelWorkerRequest>) => {
-  const request = event.data;
+async function handleRequest(request: ModelWorkerRequest) {
   const send = (response: ModelWorkerResponse) => self.postMessage(response);
   try {
     let value: unknown;
     if (request.type === "status") {
-      value = await currentStatus(request.manifestUrl);
+      value = await storage.status();
     } else if (request.type === "download") {
-      value = await downloadModel(request.manifestUrl, (progress) => {
+      value = await storage.download(request.version, (progress) => {
         send({ id: request.id, type: "progress", value: progress });
       });
+    } else if (request.type === "inventory") {
+      value = await storage.inventory();
+    } else if (request.type === "pause") {
+      value = await storage.pause();
+    } else if (request.type === "cancel") {
+      value = await storage.cancel(request.version);
+    } else if (request.type === "activate") {
+      await runtimeLoading;
+      value = await storage.activate(request.version);
+    } else if (request.type === "remove") {
+      value = await storage.remove(request.version);
     } else if (request.type === "delete") {
-      const root = await navigator.storage.getDirectory();
-      await root.removeEntry(MODEL_DIRECTORY, { recursive: true });
-      runtime = null;
-      catalogRuntime = null;
-      value = undefined;
+      throw new Error("请在设置中选择要删除的模型版本");
     } else if (request.type === "search") {
       value = (await readyCatalog()).search(request.query, request.limit, request.offset);
     } else if (request.type === "anime") {
@@ -1452,7 +1301,11 @@ self.addEventListener("message", async (event: MessageEvent<ModelWorkerRequest>)
     } else if (request.type === "neighborStats") {
       value = await (await readyRuntime()).neighborStats(request.ratings, request.negativeItems);
     } else {
-      value = await (await readyRuntime()).recommend(request.payload);
+      const engine = await readyRuntime();
+      if (request.payload.modelVersion && request.payload.modelVersion !== runtimeVersion) {
+        throw new Error("模型已切换，请重新获取推荐");
+      }
+      value = await engine.recommend(request.payload);
     }
     send({ id: request.id, type: "result", value });
   } catch (reason) {
@@ -1461,6 +1314,16 @@ self.addEventListener("message", async (event: MessageEvent<ModelWorkerRequest>)
       type: "error",
       error: reason instanceof Error ? reason.message : "操作失败",
     });
+  }
+}
+
+let inferenceQueue = Promise.resolve();
+self.addEventListener("message", (event: MessageEvent<ModelWorkerRequest>) => {
+  const request = event.data;
+  if (["recommend", "neighborStats", "search", "anime", "animeMany", "activate"].includes(request.type)) {
+    inferenceQueue = inferenceQueue.then(() => handleRequest(request));
+  } else {
+    void handleRequest(request);
   }
 });
 

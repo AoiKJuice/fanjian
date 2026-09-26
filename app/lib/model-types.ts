@@ -30,19 +30,32 @@ export type BrowserCatalogItem = Anime & {
 };
 
 export type ModelStatus = {
-  state: "missing" | "downloading" | "ready" | "error";
+  state: "missing" | "downloading" | "paused" | "verifying" | "ready" | "error";
   downloadedBytes: number;
   totalBytes: number;
   currentFile?: string;
   error?: string;
   manifest?: BrowserModelManifest;
+  activeVersion?: string;
 };
 
 export type ModelDownloadProgress = ModelStatus & {
-  state: "downloading";
+  state: "downloading" | "verifying";
+};
+
+export type ModelRelease = {
+  title: string;
+  publishedAt: string;
+  releaseTag: string;
+  manifest: BrowserModelManifest;
+};
+export type ModelInventory = {
+  activeVersion?: string;
+  releases: (ModelRelease & { status: ModelStatus })[];
 };
 
 export type ModelRecommendationRequest = {
+  modelVersion?: string;
   ratings: Record<number, number>;
   excluded: number[];
   negativeItems: number[];
@@ -68,7 +81,12 @@ export type ModelRecommendationResult = {
 
 export type ModelWorkerRequest =
   | { id: number; type: "status"; manifestUrl: string }
-  | { id: number; type: "download"; manifestUrl: string }
+  | { id: number; type: "download"; manifestUrl: string; version?: string }
+  | { id: number; type: "inventory" }
+  | { id: number; type: "pause" }
+  | { id: number; type: "cancel"; version: string }
+  | { id: number; type: "activate"; version: string }
+  | { id: number; type: "remove"; version: string }
   | { id: number; type: "delete" }
   | { id: number; type: "search"; query: string; limit: number; offset: number }
   | { id: number; type: "anime"; malId: number }

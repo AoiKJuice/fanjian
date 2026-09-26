@@ -21,8 +21,16 @@ listen();
 function call(type,data={}){return new Promise((resolve,reject)=>{pending.set(++id,{resolve,reject});worker.postMessage({id,type,...data});});}
 document.querySelector('#start').onclick=async()=>{try{
  const started=performance.now();
+ const testManifest=await (await fetch('/manifest.json')).json();
+ const root=await (await navigator.storage.getDirectory()).getDirectoryHandle('fanjian-model-v1',{create:true});
+ try { await root.getFileHandle('versions.json'); } catch(e) {
+   if(e.name!=='NotFoundError') throw e;
+   const file=await root.getFileHandle('versions.json',{create:true}), stream=await file.createWritable();
+   await stream.write(JSON.stringify({[testManifest.model_version]:{manifest:testManifest,directory:'versions/'+encodeURIComponent(testManifest.model_version),installed:false,verified:{}}}));
+   await stream.close();
+ }
  const initial=await call('status',{manifestUrl:'/manifest.json'});
- if(initial.state!=='ready') await call('download',{manifestUrl:'/manifest.json'});
+ if(initial.state!=='ready') await call('download',{manifestUrl:'/manifest.json',version:testManifest.model_version});
  const status=await call('status',{manifestUrl:'/manifest.json'});
  if(status.state!=='ready') throw Error('Not ready after download');
  const fixtures=await (await fetch('/fixtures.json')).json();

@@ -4,6 +4,14 @@ import worker from "../deploy/cloudflare-ranker-worker.js";
 const base = "https://www.aoikjuice.com/tools/anime-affinity/model/releases/model-2026-09-25/";
 afterEach(() => vi.unstubAllGlobals());
 
+it("serves the original UserKNN release without using the website origin", async () => {
+  const fetchMock = vi.fn<typeof fetch>(async () => new Response(null));
+  vi.stubGlobal("fetch", fetchMock);
+  await worker.fetch(new Request(base.replace("model-2026-09-25", "model-2026-07-28") + "csr_indices.npy", { method: "HEAD" }));
+  expect(fetchMock.mock.calls[0][0]).toBe("https://github.com/AoiKJuice/fanjian/releases/download/model-2026-07-28/csr_indices.npy");
+  expect(fetchMock.mock.calls[0][1]?.method).toBe("HEAD");
+});
+
 it("streams partial model downloads directly from GitHub with range metadata", async () => {
   const fetchMock = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1, 2]), {
     status: 206, headers: { "Content-Range": "bytes 10-11/100", "Content-Length": "2" },

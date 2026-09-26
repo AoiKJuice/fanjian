@@ -554,9 +554,16 @@ export async function loadRecommendations(
       localNegativeItems(profileId),
       browserModelStatus(),
     ]);
-    if (!status.manifest) throw new Error("模型尚未下载");
+    if (status.state !== "ready" || !status.manifest) throw new Error("模型尚未下载");
+    if (options.runId) {
+      const previous = await loadRecommendationRun(options.runId);
+      if (previous.model_version !== status.manifest.model_version) {
+        throw new Error("此记录使用其他模型，请切换到对应版本后继续加载");
+      }
+    }
     const scoreFilterEnabled = requestFilters.minimum_bangumi_score != null;
     const requestModelPage = (offset: number, limit: number) => recommendInBrowser({
+      modelVersion: status.manifest!.model_version,
       ratings,
       excluded,
       negativeItems,

@@ -1,10 +1,11 @@
 // This route serves only immutable release assets, without using the web origin.
-const RELEASE = "model-2026-09-25";
-const PREFIX = `/tools/anime-affinity/model/releases/${RELEASE}/`;
-const ASSETS = new Set([
-  "catalog.json", "disliked_to_high.bin", "disliked_to_low.bin", "ease.bin",
-  "liked_to_low.bin", "provenance.json", "ranker.json",
-]);
+import releases from "../app/lib/model-releases.json";
+const ASSETS = new Map(releases.flatMap((release) =>
+  [release.manifest.browser_catalog, ...release.manifest.files].map((file) => [
+    file.url,
+    `https://github.com/AoiKJuice/fanjian/releases/download/${release.releaseTag}/${file.url.split("/").at(-1)}`,
+  ]),
+));
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
@@ -15,8 +16,8 @@ const CORS = {
 export default {
   async fetch(request) {
     const pathname = new URL(request.url).pathname;
-    const name = pathname.startsWith(PREFIX) ? pathname.slice(PREFIX.length) : "";
-    if (!ASSETS.has(name)) return new Response("Not found", { status: 404 });
+    const upstreamUrl = ASSETS.get(pathname);
+    if (!upstreamUrl) return new Response("Not found", { status: 404 });
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     if (!["GET", "HEAD"].includes(request.method)) {
       return new Response("Method not allowed", { status: 405, headers: { ...CORS, Allow: "GET, HEAD, OPTIONS" } });
@@ -26,7 +27,7 @@ export default {
       if (request.headers.has(key)) headers.set(key, request.headers.get(key));
     }
     const upstream = await fetch(
-      `https://github.com/AoiKJuice/fanjian/releases/download/${RELEASE}/${name}`,
+      upstreamUrl,
       { method: request.method, headers, redirect: "follow" },
     );
     const outgoing = new Headers(upstream.headers);

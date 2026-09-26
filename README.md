@@ -62,8 +62,16 @@ python scripts/prepare_browser_model.py \
 `npx wrangler deploy -c deploy/wrangler.ranker.jsonc`。它只匹配新版模型下载路径，
 不修改原有社区数据 Worker。原 UserKNN Worker 见 `deploy/cloudflare-model-worker.js`。
 Nginx 配置见 `deploy/nginx.browser-model.conf`；保留的服务器模型目录仅用于故障恢复，
-正常下载由 Cloudflare 路由直接处理。模型清单请求会合并并缓存一分钟；
-已有本地模型时远程检查最多等待 2.5 秒，随后继续使用本地模型。
+正常下载由 Cloudflare 路由直接处理；Nginx 不提供模型大文件。
+
+“设置 → 数据与模型”按行显示正式发布的模型。模型下载支持暂停、继续和取消；
+文件直接写入浏览器 OPFS，刷新或网络中断后从保存的位置继续。完整下载会核对
+SHA-256，校验通过后才允许使用。取消只清除所选版本未完成的下载。
+多个版本可同时保存在此设备，已下载版本可以离线切换；下载其他版本不会替换
+当前模型。原有本地安装会自动识别，不复制大文件，不要求重新下载。
+
+版本目录见 `app/lib/model-releases.json`，添加正式版本时更新目录并重新构建网页、
+部署模型 Worker。当前选择和安装状态保存在本地，读取状态及推荐计算不请求服务器。
 
 ## 目录与模型构建
 
