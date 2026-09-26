@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { createServer, request as proxyRequest } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,7 @@ if (!existsSync(path.join(root, "dist", "server", "index.js"))) {
 }
 
 const mime = {
+  ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
@@ -47,6 +48,16 @@ const server = createServer((incoming, outgoing) => {
     basePath && decoded.startsWith(`${basePath}/`)
       ? decoded.slice(basePath.length)
       : decoded;
+  const host = (incoming.headers["x-forwarded-host"] || incoming.headers.host || "").split(":")[0];
+  if (process.env.NEXT_PUBLIC_BROWSER_MODEL === "1" && host === "www.aoikjuice.com"
+    && (decoded === basePath || decoded.startsWith(`${basePath}/`))
+    && incoming.method === "GET" && incoming.headers.accept?.includes("text/html")
+    && !path.extname(clientPath)) {
+    const html = readFileSync(path.join(clientRoot, "origin-migration.html"), "utf8").replaceAll("__BASE_PATH__", basePath);
+    outgoing.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    outgoing.end(html);
+    return;
+  }
   const candidate = path.resolve(clientRoot, `.${clientPath}`);
   const insideClient =
     candidate === clientRoot || candidate.startsWith(`${clientRoot}${path.sep}`);
