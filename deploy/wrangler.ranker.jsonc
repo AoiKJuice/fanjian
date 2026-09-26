@@ -6,7 +6,7 @@
   "workers_dev": true,
   "routes": [
     {
-      "pattern": "www.aoikjuice.com/tools/anime-affinity/model/releases/model-2026-09-25/*",
+      "pattern": "www.aoikjuice.com/tools/anime-affinity/model/releases/*",
       "zone_name": "aoikjuice.com"
     }
   ]

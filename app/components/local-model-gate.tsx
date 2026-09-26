@@ -7,6 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useSyncExternalStore } from "react";
+import { ModelTransfer } from "./model-manager";
 import { loadLocalHealth } from "../lib/api";
 import { browserModelEnabled } from "../lib/browser-mode";
 import {
@@ -43,7 +44,7 @@ function BrowserModelGate() {
   });
 
   const currentStatus = liveStatus ?? status.data;
-  const ready = currentStatus?.state === "ready";
+  const ready = currentStatus?.state === "ready" || Boolean(currentStatus?.activeVersion);
   const downloading = currentStatus?.state === "downloading";
   const failed = currentStatus?.state === "error";
   const percent = currentStatus?.totalBytes
@@ -75,35 +76,14 @@ function BrowserModelGate() {
         aria-modal="true"
         aria-labelledby="model-gate-title"
       >
-        {failed ? (
+        {currentStatus && (failed || started || downloading || currentStatus.state === "paused" || currentStatus.state === "verifying") ? (
           <>
-            <h1 id="model-gate-title">模型下载失败</h1>
-            <div className="model-gate-actions">
-              <button
-                className="button secondary"
-                type="button"
-                onClick={() => setDismissed(true)}
-              >
-                取消
-              </button>
-              <button className="button primary" type="button" onClick={download}>
-                重新下载
-              </button>
-            </div>
-          </>
-        ) : started || downloading ? (
-          <>
-            <h1 id="model-gate-title">正在下载模型 {percent}%</h1>
-            <progress value={percent} max={100} aria-label={`模型下载进度 ${percent}%`} />
-            <div className="model-gate-actions">
-              <button
-                className="button primary"
-                type="button"
-                onClick={() => setDismissed(true)}
-              >
-                后台下载
-              </button>
-            </div>
+            <h1 id="model-gate-title">{currentStatus.state === "paused" ? "模型下载已暂停" : currentStatus.state === "verifying" ? "正在校验模型" : failed ? "模型下载失败" : `正在下载模型 ${percent}%`}</h1>
+            <ModelTransfer status={currentStatus} onChange={() => {
+              setStarted(false);
+              void queryClient.invalidateQueries();
+            }} />
+            <div className="model-gate-actions"><button className="button quiet" type="button" onClick={() => setDismissed(true)}>{downloading ? "后台下载" : "关闭"}</button></div>
           </>
         ) : (
           <>

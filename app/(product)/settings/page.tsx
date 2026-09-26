@@ -14,17 +14,10 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog } from "radix-ui";
 import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader, StatePanel } from "../../components/ui";
 import { browserModelEnabled } from "../../lib/browser-mode";
-import {
-  browserModelServerSnapshot,
-  browserModelStatus,
-  browserModelStatusSnapshot,
-  downloadBrowserModel,
-  subscribeBrowserModelStatus,
-} from "../../lib/model-client";
-import type { ModelStatus } from "../../lib/model-types";
+import { BrowserModelManager } from "../../components/model-manager";
 import { serializeProfileBackup } from "../../lib/profile-backup";
 import {
   selectActiveProfile,
@@ -33,10 +26,8 @@ import {
 } from "../../providers";
 import {
   deleteProfile,
-  loadModelCard,
   loadProfileExportData,
   loadProfiles,
-  type ModelCard,
   type Profile,
 } from "../../lib/api";
 
@@ -46,27 +37,13 @@ export default function SettingsPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [model, setModel] = useState<ModelCard | null>(null);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const activeProfile = useActiveProfile(profiles);
 
   useEffect(() => {
-    Promise.allSettled([loadProfiles(), loadModelCard()])
-      .then(([profilesResult, modelResult]) => {
-        if (profilesResult.status === "fulfilled") {
-          setProfiles(profilesResult.value);
-        } else {
-          setError(
-            profilesResult.reason instanceof Error
-              ? profilesResult.reason.message
-              : "资料读取失败",
-          );
-        }
-        if (modelResult.status === "fulfilled") {
-          setModel(modelResult.value);
-        }
-      })
-      .finally(() => setLoadingProfiles(false));
+    loadProfiles().then(setProfiles).catch((reason) => {
+      setError(reason instanceof Error ? reason.message : "资料读取失败");
+    }).finally(() => setLoadingProfiles(false));
   }, []);
 
   async function exportProfile(profile: Profile) {
@@ -185,17 +162,7 @@ export default function SettingsPage() {
           <Database size={24} weight="duotone" />
           <h2>数据与模型</h2>
         </div>
-        {browserModelEnabled && <BrowserModelDownload />}
-        <dl className="version-list">
-          <div><dt>数据版本</dt><dd>{model?.data_version ?? "读取中"}</dd></div>
-          <div><dt>模型版本</dt><dd>{model?.model_version ?? "读取中"}</dd></div>
-          <div><dt>训练用户</dt><dd>{model?.training_users.toLocaleString() ?? "—"}</dd></div>
-          <div><dt>训练评分</dt><dd>{model?.training_ratings.toLocaleString() ?? "—"}</dd></div>
-          <div><dt>作品目录</dt><dd>{model?.catalog_items.toLocaleString() ?? "—"}</dd></div>
-          {!browserModelEnabled && (
-            <div><dt>索引状态</dt><dd><span className="status-dot" /> 已加载</dd></div>
-          )}
-        </dl>
+        {browserModelEnabled && <BrowserModelManager />}
       </section>
       <section className="settings-section">
         <div className="settings-intro">
@@ -251,62 +218,6 @@ export default function SettingsPage() {
           </Dialog.Root>
         </section>
       ))}
-    </div>
-  );
-}
-
-function BrowserModelDownload() {
-  const [storedStatus, setStoredStatus] = useState<ModelStatus | null>(null);
-  const liveStatus = useSyncExternalStore(
-    subscribeBrowserModelStatus,
-    browserModelStatusSnapshot,
-    browserModelServerSnapshot,
-  );
-  useEffect(() => {
-    void browserModelStatus().then(setStoredStatus).catch((reason) => {
-      setStoredStatus({
-        state: "error",
-        downloadedBytes: 0,
-        totalBytes: 0,
-        error: reason instanceof Error ? reason.message : "模型状态读取失败",
-      });
-    });
-  }, []);
-
-  const status = liveStatus ?? storedStatus;
-  const percent = status?.totalBytes
-    ? Math.min(100, Math.floor((status.downloadedBytes / status.totalBytes) * 100))
-    : 0;
-  const downloading = status?.state === "downloading";
-  const ready = status?.state === "ready";
-
-  function startDownload() {
-    void downloadBrowserModel().then(setStoredStatus).catch(() => undefined);
-  }
-
-  return (
-    <div className="model-download-settings">
-      <div>
-        <strong>
-          {ready
-            ? "模型已下载"
-            : downloading
-              ? `正在下载模型 ${percent}%`
-              : status?.state === "error"
-                ? "模型下载失败"
-                : percent > 0
-                  ? `模型已下载 ${percent}%`
-                  : "模型尚未下载"}
-        </strong>
-        {!ready && (
-          <progress value={percent} max={100} aria-label={`模型下载进度 ${percent}%`} />
-        )}
-      </div>
-      {!ready && !downloading && (
-        <button className="button primary" type="button" onClick={startDownload}>
-          {percent > 0 ? "继续下载" : "下载模型"}
-        </button>
-      )}
     </div>
   );
 }

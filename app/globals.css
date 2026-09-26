@@ -633,6 +633,42 @@ kbd { padding: 2px 6px; background: var(--surface-muted); border: 1px solid var(
 }
 .model-download-settings progress::-webkit-progress-bar { background: var(--surface-muted); }
 .model-download-settings progress::-webkit-progress-value { background: var(--accent); }
+.model-version-list { display: grid; }
+.model-version-row { display: flex; align-items: center; gap: 20px; min-height: 68px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.model-version-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.model-version-row:first-child { padding-top: 0; }
+.model-version-heading { display: flex; flex: 1; justify-content: space-between; align-items: center; gap: 16px; min-width: 0; }
+.model-version-heading > div { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 18px; }
+.model-version-heading h3 { margin: 0; font-size: .95rem; }
+.model-version-facts { display: flex; gap: 14px; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.model-version-state { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: .85rem; font-weight: 650; }
+.model-version-state.selected { color: var(--accent); }
+.model-transfer { display: grid; gap: 12px; margin-top: 16px; }
+.model-transfer-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.model-version-row > .model-transfer { display: flex; align-items: center; gap: 14px; margin-top: 0; }
+.model-version-row .model-transfer-progress { min-width: 125px; max-width: 200px; }
+.model-version-row .model-transfer-progress > div { font-size: .75rem; }
+.model-version-row .model-transfer-actions { flex-wrap: nowrap; }
+.model-version-row .button { min-height: 34px; padding: 7px 10px; font-size: .8rem; white-space: nowrap; }
+.model-version-row .model-transfer-error { max-width: 180px; font-size: .8rem; }
+.model-transfer-progress { display: grid; gap: 9px; }
+.model-transfer-progress > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: .875rem; font-variant-numeric: tabular-nums; }
+.model-transfer progress { width: 100%; height: 8px; border: 0; border-radius: 5px; overflow: hidden; background: var(--surface-muted); accent-color: var(--accent); }
+.model-transfer progress::-webkit-progress-bar { background: var(--surface-muted); }
+.model-transfer progress::-webkit-progress-value { background: var(--accent); }
+.model-transfer-error { color: var(--danger); overflow-wrap: anywhere; }
+.model-version-row, .model-gate { overflow-wrap: anywhere; }
+.model-gate .model-transfer { width: 100%; margin-top: 0; }
+@media (max-width: 700px) {
+  .model-version-row { gap: 8px; }
+  .model-version-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .model-version-heading > div { gap: 5px; }
+  .model-version-facts { gap: 8px; }
+  .model-version-row > .model-transfer { flex-direction: column; align-items: flex-end; gap: 7px; }
+  .model-version-row .model-transfer-progress { min-width: 0; max-width: 145px; }
+  .model-version-row .model-transfer-actions { gap: 4px; }
+  .model-version-row .button { padding: 7px; }
+}
 .danger-zone { border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--line)); }
 .danger-zone .settings-intro svg { color: var(--danger); }
 .danger-button { background: var(--danger); color: #fff; }

@@ -1,0 +1,212 @@
+[
+  {
+    "title": "EASE + LambdaMART",
+    "publishedAt": "2026-09-25",
+    "releaseTag": "model-2026-09-25",
+    "manifest": {
+      "schema_version": 1,
+      "algorithm": "ease-risk-lambdamart",
+      "model_version": "ease-risk-lambdamart-2026-09-25",
+      "data_version": "user-animelist-v1+catalog-2026-27",
+      "total_bytes": 1656469862,
+      "catalog_items": 30677,
+      "training_users": 96000,
+      "training_ratings": 10822649,
+      "files": [
+        {
+          "path": "ranker-20260925/disliked_to_high.bin",
+          "bytes": 408444100,
+          "sha256": "a8a9e565050a13d1c69f5e4d197f09893fe3d506a51e6bea9974d29099ee8170",
+          "url": "/tools/anime-affinity/model/releases/model-2026-09-25/disliked_to_high.bin"
+        },
+        {
+          "path": "ranker-20260925/disliked_to_low.bin",
+          "bytes": 408444100,
+          "sha256": "3e57d26c18327d08a353569c4d50e47c30a17cd0417f00ddd847ffcd0a2d9ee9",
+          "url": "/tools/anime-affinity/model/releases/model-2026-09-25/disliked_to_low.bin"
+        },
+        {
+          "path": "ranker-20260925/ease.bin",
+          "bytes": 408444100,
+          "sha256": "9f447939872b0939b7789ca0d5ab60bc654ef85d43ed8bafc339572e89cb4dfe",
+          "url": "/tools/anime-affinity/model/releases/model-2026-09-25/ease.bin"
+        },
+        {
+          "path": "ranker-20260925/liked_to_low.bin",
+          "bytes": 408444100,
+          "sha256": "0b5acae0eddc5044ae7da0240e38fe327e512fb11c595ac731f4a5eb775938b2",
+          "url": "/tools/anime-affinity/model/releases/model-2026-09-25/liked_to_low.bin"
+        },
+        {
+          "path": "ranker-20260925/provenance.json",
+          "bytes": 827,
+          "sha256": "ebe3574b7c843093c1f3c5c0807a10bf887bd8a13a63f41eae87f0ff5fcd3c98",
+          "url": "/tools/anime-affinity/model/releases/model-2026-09-25/provenance.json"
+        },
+        {
+          "path": "ranker-20260925/ranker.json",
+          "bytes": 2926603,
+          "sha256": "95f741da7c3c39174b03e67fcdaa74eece649995c565796e260ee843e6e25f65",
+          "url": "/tools/anime-affinity/model/releases/model-2026-09-25/ranker.json"
+        }
+      ],
+      "browser_catalog": {
+        "path": "ranker-20260925/catalog.json",
+        "bytes": 19766032,
+        "sha256": "94351310faa26c4d167265449a86eeca9b822ce7cedc18e2c20ac76e24324a0d",
+        "url": "/tools/anime-affinity/model/releases/model-2026-09-25/catalog.json"
+      },
+      "ranker_metadata": "ranker-20260925/ranker.json",
+      "matrix_prefix": "ranker-20260925/",
+      "matrix_item_count": 10105
+    }
+  },
+  {
+    "title": "UserKNN",
+    "publishedAt": "2026-07-28",
+    "releaseTag": "model-2026-07-28",
+    "manifest": {
+      "schema_version": 1,
+      "model_version": "surprise_weighted_userknn-series-balanced-rank-v3-implicit-negative-v1",
+      "data_version": "user-animelist-v1+anime-offline-2026-07-04+bangumi-data-0.3.216",
+      "total_bytes": 3263204947,
+      "catalog_items": 30677,
+      "training_users": 989203,
+      "training_ratings": 134143996,
+      "files": [
+        {
+          "path": "affinity_calibration.npz",
+          "bytes": 1328,
+          "sha256": "e049da601cbcf75aa506c861fa9057a1d035c206b01899631c105a4714e7bf48",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/affinity_calibration.npz"
+        },
+        {
+          "path": "bangumi-mapping.parquet",
+          "bytes": 284594,
+          "sha256": "18d83db1bf31e60c492360e935de06a7c645105453f4abb464be671c27593096",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/bangumi-mapping.parquet"
+        },
+        {
+          "path": "catalog.parquet",
+          "bytes": 2680070,
+          "sha256": "69c611d9886f7a5d6dd345bcf85e0014be3200e961a31ae1c96a34b7d6a6d17d",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/catalog.parquet"
+        },
+        {
+          "path": "csc_indices.npy",
+          "bytes": 536576112,
+          "sha256": "499a9ad05339556dd2f87fb8eac7d9a79950b5602b0e02abe7ddb697f92034b6",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/csc_indices.npy"
+        },
+        {
+          "path": "csc_indptr.npy",
+          "bytes": 245552,
+          "sha256": "571e2e963395c6143a58872bce2ec6e923e3354ae5235e47efd7a5b7b07ff399",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/csc_indptr.npy"
+        },
+        {
+          "path": "csc_ratings.npy",
+          "bytes": 536576112,
+          "sha256": "040cfdce5ff67339723a438f00ee3ad6debd22d85d58221087991c7bc3b49477",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/csc_ratings.npy"
+        },
+        {
+          "path": "csc_residuals.npy",
+          "bytes": 536576112,
+          "sha256": "967df49e56473c7fb5d65554db356e237892709c70c7749554d148c7294d5799",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/csc_residuals.npy"
+        },
+        {
+          "path": "csr_indices.npy",
+          "bytes": 536576112,
+          "sha256": "709a71023322544cd2712f3b1a39eb148e3dadb52c21a079d1d521a3eba5b38a",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/csr_indices.npy"
+        },
+        {
+          "path": "csr_indptr.npy",
+          "bytes": 7913760,
+          "sha256": "96951c15849d639f093851199e4f416d43bcb0356a9b3bc8028a13b9e0253f32",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/csr_indptr.npy"
+        },
+        {
+          "path": "csr_ratings.npy",
+          "bytes": 536576112,
+          "sha256": "e5b154a295d3b2180ef9bfae1e2802a4c7e580594ad46b607f529730c1cf952d",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/csr_ratings.npy"
+        },
+        {
+          "path": "csr_residuals.npy",
+          "bytes": 536576112,
+          "sha256": "9afe63dac5a0ae0dbcbbadebbe1391e492acfe4f464d9480a98452195cf9ea2e",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/csr_residuals.npy"
+        },
+        {
+          "path": "global_mean.txt",
+          "bytes": 16,
+          "sha256": "85ce44014a83273d6748a3080ad911b34467fb937f654f1e289cb8e893b86bc4",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/global_mean.txt"
+        },
+        {
+          "path": "item_bias.npy",
+          "bytes": 122836,
+          "sha256": "f8148cae12eef5065280c61b7c11d0b4face695c76d134c5a1ac056dd942b9c9",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/item_bias.npy"
+        },
+        {
+          "path": "item_counts.npy",
+          "bytes": 245544,
+          "sha256": "928bfe93c00cdb28a5adfcd5555db0af2510200e3d9b5afc7560977a49d83335",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/item_counts.npy"
+        },
+        {
+          "path": "item_iuf.npy",
+          "bytes": 122836,
+          "sha256": "50857e39156f05584a521aa7cb237eaa95a0816bc2f17c8637ece2c8e172e1a2",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/item_iuf.npy"
+        },
+        {
+          "path": "item_surprise.npy",
+          "bytes": 368252,
+          "sha256": "e99fab5340d58b700c084b7fd90769dc6c925dfe44a66f6c57a3c4ee5421f86b",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/item_surprise.npy"
+        },
+        {
+          "path": "mal_ids.npy",
+          "bytes": 122836,
+          "sha256": "87994d7a827c1fc9e6b634487e8a18c8aa9e8eca2260e43594b211d37368a413",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/mal_ids.npy"
+        },
+        {
+          "path": "manifest.json",
+          "bytes": 3023,
+          "sha256": "6242ffb6cd4f9da1c80dc271574355a1366be5747b2f6288d3d0cb7837f54c1f",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/manifest.json"
+        },
+        {
+          "path": "model-selection.json",
+          "bytes": 904,
+          "sha256": "807863e1ae4ebca0c4bf6b0e0050470409b36ac6a4df459be628ed116df1bb9e",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/model-selection.json"
+        },
+        {
+          "path": "user_ids.npy",
+          "bytes": 7913752,
+          "sha256": "985cb1bf7dc757f68fb40ce23790e3cc2f160a7a169f87c35ded9bbd8acc21df",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/user_ids.npy"
+        },
+        {
+          "path": "user_rating_mean.npy",
+          "bytes": 3956940,
+          "sha256": "107bb10d09865f921fa925701a0d55547f8c9de0cb9abf40adeee404b046e26b",
+          "url": "/tools/anime-affinity/model/releases/model-2026-07-28/user_rating_mean.npy"
+        }
+      ],
+      "browser_catalog": {
+        "path": "browser/catalog.json",
+        "bytes": 19766032,
+        "sha256": "94351310faa26c4d167265449a86eeca9b822ce7cedc18e2c20ac76e24324a0d",
+        "url": "/tools/anime-affinity/model/releases/model-2026-07-28/catalog.json"
+      }
+    }
+  }
+]
