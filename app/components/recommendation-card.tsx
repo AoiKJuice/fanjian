@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { useBangumiAnime } from "../lib/bangumi-client";
 import type { Recommendation } from "../lib/data";
 import { AnimeCover } from "./anime-cover";
+import { displayRankScore } from "../lib/recommendation-display";
 
 const HIDE_UNDO_DELAY_MS = 3200;
 
@@ -104,7 +105,7 @@ export function RecommendationCard({
           )}
         </div>
         <div className="compact-affinity">
-          <strong>{item.score_kind === "rank" ? item.rank_score.toFixed(2) : item.affinity}</strong>
+          <strong>{item.score_kind === "rank" ? displayRankScore(item.rank_score) : item.affinity}</strong>
           <span>{item.score_kind === "rank" ? "排序分" : "亲和度"}</span>
         </div>
       </article>
@@ -129,7 +130,7 @@ export function RecommendationCard({
           src={anime.cover_url}
         />
         <span className="affinity-stamp">
-          <strong>{item.score_kind === "rank" ? item.rank_score.toFixed(2) : item.affinity}</strong>
+          <strong>{item.score_kind === "rank" ? displayRankScore(item.rank_score) : item.affinity}</strong>
           <small>{item.score_kind === "rank" ? "排序分" : "亲和度"}</small>
         </span>
       </Link>

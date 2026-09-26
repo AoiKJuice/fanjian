@@ -111,6 +111,7 @@ function runMatchesFilters(filters: string | undefined, expected: object) {
       maximum_year: saved.maximum_year ?? null,
       include_short_form: saved.include_short_form !== false,
       exclude_related: saved.exclude_related === true,
+      related_filter_version: Number(saved.related_filter_version) || 0,
     };
     return JSON.stringify(normalized) === JSON.stringify(expected);
   } catch {

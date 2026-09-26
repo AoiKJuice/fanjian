@@ -77,6 +77,7 @@ export function recommendationFilterRecord(
     maximum_year: filters.maximumYear ?? null,
     include_short_form: filters.includeShortForm ?? true,
     exclude_related: filters.excludeRelated ?? false,
+    related_filter_version: filters.excludeRelated ? 2 : 0,
   };
 }
 
@@ -548,11 +549,12 @@ export async function loadRecommendations(
     Math.ceil((options.limit ?? 100) / 100) * 100,
   );
   if (browserModelEnabled) {
-    const [ratings, excluded, negativeItems, status] = await Promise.all([
+    const [ratings, excluded, negativeItems, status, library] = await Promise.all([
       localRatingsMap(profileId),
       localExcluded(profileId),
       localNegativeItems(profileId),
       browserModelStatus(),
+      loadLocalLibrary(profileId),
     ]);
     if (status.state !== "ready" || !status.manifest) throw new Error("模型尚未下载");
     if (options.runId) {
@@ -578,6 +580,7 @@ export async function loadRecommendations(
       maximumYear: requestFilters.maximum_year,
       includeShortForm: requestFilters.include_short_form,
       excludeRelated: requestFilters.exclude_related,
+      watchedIds: library.filter(item => item.status !== "plan_to_watch").map(item => item.mal_id),
     });
     let items: Recommendation[] = [];
     let hasMore = false;

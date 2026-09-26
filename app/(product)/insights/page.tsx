@@ -10,6 +10,7 @@ import dynamic from "next/dynamic";
 import { Metric, PageHeader, StatePanel } from "../../components/ui";
 import { loadInsights, loadProfiles } from "../../lib/api";
 import { useActiveProfile } from "../../providers";
+import { displayMetric } from "../../lib/recommendation-display";
 
 const InsightsChart = dynamic(
   () =>
@@ -56,9 +57,9 @@ export default function InsightsPage() {
         title="审美分析"
       />
       <div className="metric-strip">
-        <Metric value={String(insights.mean_rating)} label="平均评分" />
-        <Metric value={String(insights.rating_stddev)} label="标准差" />
-        <Metric value={`${insights.long_tail_ratio}%`} label="长尾观看比例" />
+        <Metric value={displayMetric(insights.mean_rating, 2)} label="平均评分" />
+        <Metric value={displayMetric(insights.rating_stddev, 2)} label="标准差" />
+        <Metric value={`${displayMetric(insights.long_tail_ratio)}%`} label="长尾观看比例" />
         <Metric value={String(insights.neighbor_count)} label="正相似邻居" />
       </div>
 
@@ -95,7 +96,7 @@ export default function InsightsPage() {
             <Compass size={26} weight="duotone" />
           </div>
           <div className="signal-card-body">
-            <strong>{insights.mainstream_index}</strong>
+            <strong>{displayMetric(insights.mainstream_index)}</strong>
             <h2>{insights.mainstream_index >= 67 ? "观看较集中于高关注作品" : insights.mainstream_index <= 33 ? "观看较偏长尾" : "主流与长尾较均衡"}</h2>
           </div>
         </section>
