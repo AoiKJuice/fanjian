@@ -70,6 +70,7 @@ export type ModelRecommendationRequest = {
   maximumYear?: number | null;
   includeShortForm?: boolean;
   excludeRelated?: boolean;
+  watchedIds?: number[];
 };
 
 export type ModelRecommendationResult = {

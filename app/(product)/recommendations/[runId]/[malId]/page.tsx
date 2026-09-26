@@ -18,6 +18,7 @@ import { AnimeCover } from "../../../../components/anime-cover";
 import { AnimeCommunity } from "../../../../components/anime-community";
 import { StatePanel } from "../../../../components/ui";
 import { useBangumiAnime } from "../../../../lib/bangumi-client";
+import { displayRankScore } from "../../../../lib/recommendation-display";
 import {
   loadCollections,
   loadRecommendations,
@@ -303,7 +304,7 @@ export default function RecommendationDetailPage() {
         </div>
         <div className="affinity-panel">
           <span className="eyebrow">{item.score_kind === "rank" ? "排序分（非喜欢概率）" : "预测亲和度"}</span>
-          <strong>{item.score_kind === "rank" ? item.rank_score.toFixed(2) : item.affinity}</strong>
+          <strong>{item.score_kind === "rank" ? displayRankScore(item.rank_score) : item.affinity}</strong>
         </div>
       </section>
 

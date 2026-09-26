@@ -7,6 +7,7 @@ import {
 } from "../lib/anime-metadata.generated";
 import { parseNpyShape } from "../lib/npy";
 import { ModelStorage } from "../lib/model-storage";
+import { continuationTitle, watchedSeriesExclusions } from "../lib/related-filter";
 import { RankerEngine, type RankerMetadata, type MatrixName } from "../lib/ranker-engine";
 import type {
   BrowserCatalogItem,
@@ -387,7 +388,7 @@ class BrowserRecommender {
       this.catalog.map((item) => Number(isAncillary(item.format, item.title_en))),
     );
     this.inferredContinuation = Uint8Array.from(
-      this.catalog.map((item) => Number(looksLikeContinuation(item.title_en))),
+      this.catalog.map((item) => Number(continuationTitle(item.title_en, item.title_zh, item.title_native))),
     );
     this.requiresContext = Uint8Array.from(
       this.catalog.map((item) => Number(requiresSeriesContext(item.format, item.title_en))),
@@ -526,6 +527,7 @@ class BrowserRecommender {
       ...Object.keys(payload.ratings).map(Number),
     ]);
     const formats = new Set(payload.formats.map((value) => value.toUpperCase()));
+    const related = payload.excludeRelated ? watchedSeriesExclusions(payload.watchedIds ?? Object.keys(payload.ratings).map(Number)) : new Set<number>();
     const minimumAffinity = payload.minimumAffinity ?? 60;
     const offset = Math.max(0, payload.offset ?? 0);
     const limit = Math.max(1, payload.limit);
@@ -552,6 +554,7 @@ class BrowserRecommender {
         (payload.includeShortForm === false && shortFormAnimeIds.has(malId))
       ) continue;
       if (payload.excludeRelated && (
+        related.has(malId) ||
         catalogItem.sequel ||
         this.inferredContinuation[candidate.item] ||
         this.requiresContext[candidate.item] ||
@@ -589,6 +592,9 @@ class BrowserRecommender {
     if (this.rankedCache?.key !== key) {
       const excluded = new Set([...payload.excluded, ...payload.negativeItems, ...Object.keys(payload.ratings).map(Number)]);
       const formats = new Set(payload.formats.map(f => f.toUpperCase()));
+      if (payload.excludeRelated) {
+        for (const id of watchedSeriesExclusions(payload.watchedIds ?? Object.keys(payload.ratings).map(Number))) excluded.add(id);
+      }
       const profileSeries = new Set(Object.keys(payload.ratings).flatMap(id => {
         const i = this.itemByMal.get(Number(id));
         return i === undefined ? [] : [this.seriesKeys[i]];
@@ -1172,7 +1178,7 @@ function publicAnime(item: BrowserCatalogItem): Anime {
     platform_mean: item.platform_mean,
     bangumi_score: item.bangumi_score,
     matched_tags: item.matched_tags,
-    is_sequel: item.sequel || looksLikeContinuation(item.title_en),
+    is_sequel: item.sequel || continuationTitle(item.title_en, item.title_zh, item.title_native),
     is_derivative:
       nonPrimaryAnimeIds.has(item.mal_id)
       || isAncillary(item.format, item.title_en),
@@ -1206,12 +1212,6 @@ function isAncillary(format: string | null, title: string | null) {
   return ["OVA", "SPECIAL", "TV SPECIAL", "MUSIC", "PV", "CM"].includes(
     (format ?? "").toUpperCase(),
   ) || /\b(?:recap|summary|picture drama|promotional video)\b/i.test(title ?? "");
-}
-
-function looksLikeContinuation(title: string | null) {
-  const value = (title ?? "").normalize("NFKC");
-  return /(?:\b(?:season|part)\s*(?:[2-9]|ii|iii|iv)\b|\b(?:2nd|3rd|4th)\b|[×x]\s*(?:[2-9]|\d{3,4})\b|\br[2-9]\b)/i.test(value)
-    || /(?:^|[\s:])(?:II|III|IV)(?:$|[\s:])/.test(value);
 }
 
 function requiresSeriesContext(format: string | null, title: string | null) {
